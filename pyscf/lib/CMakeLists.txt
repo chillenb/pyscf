@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required (VERSION 3.5)
+cmake_minimum_required (VERSION 3.14)
 project (pyscf)
+
+include(FetchContent)
 
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
@@ -113,9 +115,8 @@ endif()
 
 include_directories(${PROJECT_SOURCE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/deps/include)
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/deps/include)
 include_directories(${CMAKE_INSTALL_PREFIX}/include)
-link_directories(${PROJECT_SOURCE_DIR}/deps/lib ${PROJECT_SOURCE_DIR}/deps/lib64)
-link_directories(${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib64)
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/config.h.in"
@@ -139,16 +140,6 @@ endif ()
 option(ENABLE_FFTW "Using fftw3" OFF)
 option(BUILD_FFTW "Building fftw3" OFF)
 
-add_subdirectory(np_helper)
-add_subdirectory(gto)
-add_subdirectory(vhf)
-add_subdirectory(ao2mo)
-add_subdirectory(mcscf)
-add_subdirectory(cc)
-add_subdirectory(ri)
-#add_subdirectory(localizer)
-add_subdirectory(pbc)
-add_subdirectory(agf2)
 
 # Overwrite CMAKE_C_CREATE_SHARED_LIBRARY in Modules/CMakeCInformation.cmake
 # to remove the SONAME flag in the so file. The soname information causes
@@ -162,8 +153,8 @@ option(WITH_F12 "Compling F12 integrals" ON)
 option(USE_QCINT "Using the qcint library (optimized for x86-64) for gaussian integral evaluation" OFF)
 
 if(BUILD_LIBCINT)
-  set(LIBCINT_GIT https://github.com/sunqm/libcint.git) # libcint is a portable, cross-platform implementation
-  set(LIBCINT_VERSION v6.1.1)
+  set(LIBCINT_GIT https://github.com/chillenb/libcint.git) # libcint is a portable, cross-platform implementation
+  set(LIBCINT_VERSION f595f20dab8e96372ddce180af669a7f791849aa)
   if (USE_QCINT)
     set(LIBCINT_GIT https://github.com/sunqm/qcint.git) # qcint is an optimized implementation for x86-64 architecture
     set(LIBCINT_VERSION v6.1.2)
@@ -172,29 +163,49 @@ if(BUILD_LIBCINT)
     endif()
   endif()
 
-  ExternalProject_Add(libcint
+  FetchContent_Declare(
+    cint
     GIT_REPOSITORY ${LIBCINT_GIT}
     GIT_TAG ${LIBCINT_VERSION}
-    PREFIX ${PROJECT_BINARY_DIR}/deps
-    INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE
-    CMAKE_CACHE_ARGS
-        -DWITH_F12:STRING=${WITH_F12}
-        -DWITH_RANGE_COULOMB:STRING=1
-        -DWITH_FORTRAN:STRING=0
-        -DWITH_CINT2_INTERFACE:STRING=0
-        -DMIN_EXPCUTOFF:STRING=20
-        -DKEEP_GOING:STRING=1
-        -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-        -DCMAKE_INSTALL_LIBDIR:PATH=lib
-        -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
-        -DBLAS_LIBRARIES:STRING=${BLAS_LIBRARIES}
-        -DCMAKE_C_CREATE_SHARED_LIBRARY:STRING=${C_LINK_TEMPLATE}
-        -DBUILD_MARCH_NATIVE:STRING=${BUILD_MARCH_NATIVE}
   )
-  add_dependencies(cgto libcint)
-  add_dependencies(ao2mo libcint)
-endif() # BUILD_LIBCINT
+  set(WITH_RANGE_COULOMB 1)
+  set(WITH_FORTRAN 0)
+  set(WITH_CINT2_INTERFACE 0)
+  set(MIN_EXPCUTOFF 20)
+  set(KEEP_GOING 1)
+  
+
+# The following parameters do not need to be set anymore
+# thanks to the use of FetchContent.
+# 
+#         -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+#         -DCMAKE_INSTALL_LIBDIR:PATH=lib
+#         -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
+#         -DBLAS_LIBRARIES:STRING=${BLAS_LIBRARIES}
+#         -DCMAKE_C_CREATE_SHARED_LIBRARY:STRING=${C_LINK_TEMPLATE}
+#         -DBUILD_MARCH_NATIVE:STRING=${BUILD_MARCH_NATIVE}
+
+
+  FetchContent_GetProperties(cint)
+  if(NOT cint_POPULATED)
+    FetchContent_Populate(cint)
+    # EXCLUDE_FROM_ALL means not to use the install commands from libcint.
+    add_subdirectory(${cint_SOURCE_DIR} ${cint_BINARY_DIR} EXCLUDE_FROM_ALL)
+  endif()
+
+  # When doing an in-source build, libcint.so should be put in the source directory.
+  # The following is not needed for out-of-source build with scikit-build-core.
+  set_target_properties(cint
+    PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/lib
+  )
+
+  message("libcint source dir: ${cint_SOURCE_DIR}")
+  message("libcint binary dir: ${cint_BINARY_DIR}")
+
+else() # BUILD_LIBCINT
+  find_package(cint REQUIRED)
+endif()
 
 option(ENABLE_LIBXC "Using libxc for XC functional library" ON)
 option(ENABLE_XCFUN "Using xcfun for XC functional library" ON)
@@ -210,41 +221,55 @@ endif()
 if(NOT DISABLE_DFT)
 add_subdirectory(dft)
 
-if(ENABLE_LIBXC AND BUILD_LIBXC)
-  ExternalProject_Add(libxc
-    #GIT_REPOSITORY https://gitlab.com/libxc/libxc.git
-    #GIT_TAG master
-    URL https://gitlab.com/libxc/libxc/-/archive/6.1.0/libxc-6.1.0.tar.gz
-    PREFIX ${PROJECT_BINARY_DIR}/deps
-    INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1
-            -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-            -DCMAKE_INSTALL_LIBDIR:PATH=lib
-            -DENABLE_FORTRAN=0 -DDISABLE_KXC=0 -DDISABLE_LXC=1
-            -DCMAKE_C_CREATE_SHARED_LIBRARY=${C_LINK_TEMPLATE}
-            -DENABLE_XHOST:STRING=${BUILD_MARCH_NATIVE}
-            -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
-  )
-  add_dependencies(xc_itrf libxc)
-  add_dependencies(dft libxc)
+if(ENABLE_LIBXC)
+  if(BUILD_LIBXC)
+    ExternalProject_Add(Libxc
+      #GIT_REPOSITORY https://gitlab.com/libxc/libxc.git
+      #GIT_TAG master
+      URL https://gitlab.com/libxc/libxc/-/archive/6.1.0/libxc-6.1.0.tar.gz
+      PREFIX ${PROJECT_BINARY_DIR}/deps
+      INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
+      CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1
+              -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+              -DCMAKE_INSTALL_LIBDIR:PATH=lib
+              -DENABLE_FORTRAN=0 -DDISABLE_KXC=0 -DDISABLE_LXC=1
+              -DCMAKE_C_CREATE_SHARED_LIBRARY=${C_LINK_TEMPLATE}
+              -DENABLE_XHOST:STRING=${BUILD_MARCH_NATIVE}
+              -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
+    )
+  add_dependencies(xc_itrf Libxc)
+  add_dependencies(dft Libxc)
+  else()
+    find_package(Libxc REQUIRED)
+    if(NOT Libxc_FOUND)
+      message(FATAL_ERROR "You set ENABLE_LIBXC, but not BUILD_LIBXC, and libxc can't be found")
+    endif()
+  endif() # BUILD_LIBXC
 endif() # ENABLE_LIBXC
 
-if(ENABLE_XCFUN AND BUILD_XCFUN)
-  ExternalProject_Add(libxcfun
-    GIT_REPOSITORY https://github.com/dftlibs/xcfun.git
-    GIT_TAG a89b783
-    # This patch adds the xcfun derivative order up to 5
-    PATCH_COMMAND git apply --reject ${PROJECT_SOURCE_DIR}/libxcfun.patch || true
-    PREFIX ${PROJECT_BINARY_DIR}/deps
-    INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1
-            -DXCFUN_MAX_ORDER=${XCFUN_MAX_ORDER} -DENABLE_TESTALL=0
-            -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-            -DCMAKE_CXX_CREATE_SHARED_LIBRARY=${CXX_LINK_TEMPLATE}
-            -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-  )
-  add_dependencies(xcfun_itrf libxcfun)
-  add_dependencies(dft libxcfun)
+if(ENABLE_XCFUN)
+  if(BUILD_XCFUN)
+    ExternalProject_Add(XCFun
+      GIT_REPOSITORY https://github.com/dftlibs/xcfun.git
+      GIT_TAG a89b783
+      # This patch adds the xcfun derivative order up to 5
+      PATCH_COMMAND git apply --reject ${PROJECT_SOURCE_DIR}/libxcfun.patch || true
+      PREFIX ${PROJECT_BINARY_DIR}/deps
+      INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
+      CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1
+              -DXCFUN_MAX_ORDER=${XCFUN_MAX_ORDER} -DENABLE_TESTALL=0
+              -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+              -DCMAKE_CXX_CREATE_SHARED_LIBRARY=${CXX_LINK_TEMPLATE}
+              -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+    )
+  add_dependencies(xcfun_itrf XCFun)
+  add_dependencies(dft XCFun)
+  else()
+    find_package(XCFun REQUIRED)
+    if(NOT XCFun_FOUND)
+      message(FATAL_ERROR "You set ENABLE_XCFUN, but not BUILD_XCFUN, and xcfun can't be found")
+    endif()
+  endif() # BUILD_XCFUN
 endif() # ENABLE_XCFUN
 
 if(ENABLE_LIBXSMM AND BUILD_LIBXSMM)
@@ -281,4 +306,35 @@ endif()
 
 if(EXISTS "${PROJECT_SOURCE_DIR}/cmake.user.inc")
   include("${PROJECT_SOURCE_DIR}/cmake.user.inc")
+endif()
+
+add_subdirectory(np_helper)
+add_subdirectory(gto)
+add_subdirectory(vhf)
+add_subdirectory(ao2mo)
+add_subdirectory(mcscf)
+add_subdirectory(cc)
+add_subdirectory(ri)
+add_subdirectory(pbc)
+add_subdirectory(agf2)
+
+# The following install commands are used when scikit-build-core
+# is building a wheel.
+if(DEFINED SKBUILD)
+  install(TARGETS np_helper cgto cvhf ao2mo mcscf cc ri pbc agf2 fci dft)
+
+  if(ENABLE_XCFUN)
+    install(TARGETS xcfun_itrf)
+  endif()
+
+  if(ENABLE_LIBXC)
+    install(TARGETS xc_itrf)
+  endif()
+
+  if(BUILD_LIBCINT)
+    set_target_properties(cint PROPERTIES NO_SONAME 1)
+    install(TARGETS cint
+    DESTINATION lib/deps/lib)
+  endif()
+
 endif()
