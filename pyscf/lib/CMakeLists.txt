@@ -209,7 +209,7 @@ endif()
 
 option(ENABLE_LIBXC "Using libxc for XC functional library" ON)
 option(ENABLE_XCFUN "Using xcfun for XC functional library" ON)
-option(BUILD_LIBXC "Download and build libxc library" ON)
+option(BUILD_LIBXC "Download and build libxc library" OFF)
 option(BUILD_XCFUN "Download and build xcfun library" ON)
 
 option(ENABLE_LIBXSMM "Using libxsmm" OFF)
@@ -239,6 +239,10 @@ if(ENABLE_LIBXC)
     )
   add_dependencies(xc_itrf Libxc)
   add_dependencies(dft Libxc)
+
+  target_link_directories(xc_itrf PRIVATE deps/lib)
+  target_link_directories(dft PRIVATE deps/lib)
+
   else()
     find_package(Libxc REQUIRED)
     if(NOT Libxc_FOUND)
@@ -264,6 +268,10 @@ if(ENABLE_XCFUN)
     )
   add_dependencies(xcfun_itrf XCFun)
   add_dependencies(dft XCFun)
+
+  target_link_directories(xcfun_itrf PRIVATE deps/lib)
+  target_link_directories(dft PRIVATE deps/lib)
+
   else()
     find_package(XCFun REQUIRED)
     if(NOT XCFun_FOUND)
