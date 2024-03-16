@@ -219,7 +219,6 @@ if(APPLE)
 endif()
 
 if(NOT DISABLE_DFT)
-add_subdirectory(dft)
 
 if(ENABLE_LIBXC)
   if(BUILD_LIBXC)
@@ -237,11 +236,8 @@ if(ENABLE_LIBXC)
               -DENABLE_XHOST:STRING=${BUILD_MARCH_NATIVE}
               -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
     )
-  add_dependencies(xc_itrf Libxc)
-  add_dependencies(dft Libxc)
-
-  target_link_directories(xc_itrf PRIVATE deps/lib)
-  target_link_directories(dft PRIVATE deps/lib)
+    add_library(xc SHARED IMPORTED)
+    set_target_properties(xc PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/deps/lib/libxc${CMAKE_SHARED_LIBRARY_SUFFIX})  
 
   else()
     find_package(Libxc REQUIRED)
@@ -267,11 +263,9 @@ if(ENABLE_XCFUN)
               -DCMAKE_CXX_CREATE_SHARED_LIBRARY=${CXX_LINK_TEMPLATE}
               -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
     )
-  add_dependencies(xcfun_itrf XCFun)
-  add_dependencies(dft XCFun)
 
-  target_link_directories(xcfun_itrf PRIVATE deps/lib)
-  target_link_directories(dft PRIVATE deps/lib)
+  add_library(xcfun SHARED IMPORTED)
+  set_target_properties(xcfun PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/deps/lib/libxcfun${CMAKE_SHARED_LIBRARY_SUFFIX})
 
   else()
     find_package(XCFun REQUIRED)
@@ -296,6 +290,8 @@ if(ENABLE_LIBXSMM AND BUILD_LIBXSMM)
     add_dependencies(dft libxsmm)
   endif()
 endif()
+
+add_subdirectory(dft)
 endif() # DISABLE_DFT
 
 if(ENABLE_FFTW AND BUILD_FFTW)
