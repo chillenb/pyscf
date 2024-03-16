@@ -219,26 +219,32 @@ if(APPLE)
 endif()
 
 if(NOT DISABLE_DFT)
+add_subdirectory(dft)
 
 if(ENABLE_LIBXC)
   if(BUILD_LIBXC)
-    ExternalProject_Add(Libxc
-      #GIT_REPOSITORY https://gitlab.com/libxc/libxc.git
-      #GIT_TAG master
+    FetchContent_Declare(
+      xc
       URL https://gitlab.com/libxc/libxc/-/archive/6.1.0/libxc-6.1.0.tar.gz
-      PREFIX ${PROJECT_BINARY_DIR}/deps
-      INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-      CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1
-              -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-              -DCMAKE_INSTALL_LIBDIR:PATH=lib
-              -DENABLE_FORTRAN=0 -DDISABLE_KXC=0 -DDISABLE_LXC=1
-              -DCMAKE_C_CREATE_SHARED_LIBRARY=${C_LINK_TEMPLATE}
-              -DENABLE_XHOST:STRING=${BUILD_MARCH_NATIVE}
-              -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
     )
-    add_library(xc SHARED IMPORTED)
-    set_target_properties(xc PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/deps/lib/libxc${CMAKE_SHARED_LIBRARY_SUFFIX})  
+    set(ENABLE_FORTRAN 0)
+    set(DISABLE_KXC OFF)
+    set(DISABLE_LXC ON)
+    set(ENABLE_XHOST ${BUILD_MARCH_NATIVE})
 
+    FetchContent_GetProperties(xc)
+    if(NOT xc_POPULATED)
+      FetchContent_Populate(xc)
+      # EXCLUDE_FROM_ALL means not to use the install commands from xcfun.
+      add_subdirectory(${xc_SOURCE_DIR} ${xc_BINARY_DIR} EXCLUDE_FROM_ALL)
+    endif()
+    target_include_directories(xc_itrf PUBLIC ${xc_BINARY_DIR}/src ${xc_BINARY_DIR} ${xc_SOURCE_DIR}/src)
+
+    set_target_properties(xc
+      PROPERTIES
+      LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/lib
+    )
+  
   else()
     find_package(Libxc REQUIRED)
     if(NOT Libxc_FOUND)
@@ -249,23 +255,26 @@ endif() # ENABLE_LIBXC
 
 if(ENABLE_XCFUN)
   if(BUILD_XCFUN)
-    ExternalProject_Add(XCFun
-      GIT_REPOSITORY https://github.com/dftlibs/xcfun.git
-      GIT_TAG a89b783
-      # This patch adds the xcfun derivative order up to 5
-      PATCH_COMMAND git apply --reject ${PROJECT_SOURCE_DIR}/libxcfun.patch || true
-      PREFIX ${PROJECT_BINARY_DIR}/deps
-      INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-      CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1
-              -DXCFUN_MAX_ORDER=${XCFUN_MAX_ORDER} -DENABLE_TESTALL=0
-              -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-              -DCMAKE_INSTALL_LIBDIR:PATH=lib
-              -DCMAKE_CXX_CREATE_SHARED_LIBRARY=${CXX_LINK_TEMPLATE}
-              -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-    )
 
-  add_library(xcfun SHARED IMPORTED)
-  set_target_properties(xcfun PROPERTIES IMPORTED_LOCATION ${PROJECT_SOURCE_DIR}/deps/lib/libxcfun${CMAKE_SHARED_LIBRARY_SUFFIX})
+  FetchContent_Declare(
+    xcfun
+    GIT_REPOSITORY https://github.com/dftlibs/xcfun.git
+    GIT_TAG a89b783
+    PATCH_COMMAND git apply --reject ${PROJECT_SOURCE_DIR}/libxcfun.patch || true
+  )
+  set(ENABLE_TESTALL 0)
+
+  FetchContent_GetProperties(xcfun)
+  if(NOT xcfun_POPULATED)
+    FetchContent_Populate(xcfun)
+    # EXCLUDE_FROM_ALL means not to use the install commands from xcfun.
+    add_subdirectory(${xcfun_SOURCE_DIR} ${xcfun_BINARY_DIR} EXCLUDE_FROM_ALL)
+  endif()
+
+  set_target_properties(xcfun
+    PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/lib
+  )
 
   else()
     find_package(XCFun REQUIRED)
@@ -291,7 +300,6 @@ if(ENABLE_LIBXSMM AND BUILD_LIBXSMM)
   endif()
 endif()
 
-add_subdirectory(dft)
 endif() # DISABLE_DFT
 
 if(ENABLE_FFTW AND BUILD_FFTW)
@@ -333,8 +341,10 @@ if(DEFINED SKBUILD)
   endif()
 
   if(BUILD_XCFUN)
-    install(FILES ${PROJECT_SOURCE_DIR}/deps/lib/libxcfun${CMAKE_SHARED_LIBRARY_SUFFIX}
-    DESTINATION lib/deps/lib)
+    set_target_properties(xcfun PROPERTIES NO_SONAME 1)
+    install(TARGETS xcfun
+    LIBRARY DESTINATION lib/deps/lib
+    PUBLIC_HEADER DESTINATION lib/deps/include)
   endif()
 
   if(ENABLE_LIBXC)
@@ -342,8 +352,10 @@ if(DEFINED SKBUILD)
   endif()
 
   if(BUILD_LIBXC)
-    install(FILES ${PROJECT_SOURCE_DIR}/deps/lib/libxc${CMAKE_SHARED_LIBRARY_SUFFIX}
-    DESTINATION lib/deps/lib)
+    set_target_properties(xc PROPERTIES NO_SONAME 1)
+    install(TARGETS xc
+    LIBRARY DESTINATION lib/deps/lib
+    PUBLIC_HEADER DESTINATION lib/deps/include)
   endif()
 
   if(BUILD_LIBCINT)
