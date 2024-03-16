@@ -1,6 +1,6 @@
 package:
   name: "pyscf"
-  version: "{{ version }}"
+  version: {{ GIT_DESCRIBE_TAG }}
 
 source:
   path: ..
@@ -14,6 +14,7 @@ requirements:
     - cmake
     - make
     - mkl
+    - scikit-build-core
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
   host:
@@ -30,6 +31,6 @@ test:
     - pyscf.lib
 
 about:
-  home: "{{ data['url'] }}"
-  license: "{{ data['license'] }}"
-  summary: "{{ data['description'] }}"
+  home: "http://www.pyscf.org"
+  license: "Apache-2.0"
+  summary: "PySCF: Python-based Simulations of Chemistry Framework"
