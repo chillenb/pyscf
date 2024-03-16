@@ -336,8 +336,18 @@ if(DEFINED SKBUILD)
     install(TARGETS xcfun_itrf)
   endif()
 
+  if(BUILD_XCFUN)
+    install(FILES ${PROJECT_SOURCE_DIR}/deps/lib/libxcfun${CMAKE_SHARED_LIBRARY_SUFFIX}
+    DESTINATION lib/deps/lib)
+  endif()
+
   if(ENABLE_LIBXC)
     install(TARGETS xc_itrf)
+  endif()
+
+  if(BUILD_LIBXC)
+    install(FILES ${PROJECT_SOURCE_DIR}/deps/lib/libxc${CMAKE_SHARED_LIBRARY_SUFFIX}
+    DESTINATION lib/deps/lib)
   endif()
 
   if(BUILD_LIBCINT)
