@@ -17,8 +17,11 @@ requirements:
     - scikit-build-core
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
+    - llvm-openmp # [osx]
+    - libgomp # [linux]
   host:
     - python
+    - scikit-build-core
   run:
     - python
     - mkl
