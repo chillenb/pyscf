@@ -17,6 +17,17 @@ project (pyscf)
 
 include(FetchContent)
 
+# Out-of-source build is required for scikit-build-core when using conda-build
+if(DEFINED SKBUILD)
+  set(PYSCF_LIBOUTDIR_ROOT ${PROJECT_BINARY_DIR})
+else()
+  set(PYSCF_LIBOUTDIR_ROOT ${PROJECT_SOURCE_DIR})
+endif()
+
+set(PYSCF_THIRDPARTY_LIBOUTDIR ${PYSCF_LIBOUTDIR_ROOT}/deps/lib)
+
+
+
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
 endif()
@@ -69,9 +80,14 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/cmake.arch.inc")
 endif()
 
 if (NOT BLAS_LIBRARIES)
-#enable_language(Fortran)
-find_package(BLAS)
-check_function_exists(ffsll HAVE_FFS)
+  #enable_language(Fortran)
+  set(BLA_VENDOR Intel10_64lp_seq)
+  find_package(BLAS)
+  if(NOT BLAS_FOUND)
+    unset(BLA_VENDOR)
+    find_package(BLAS)
+  endif()
+  check_function_exists(ffsll HAVE_FFS)
 endif()
 
 if (NOT BLAS_LIBRARIES)
@@ -132,10 +148,10 @@ elseif (APPLE)
   set(CMAKE_INSTALL_RPATH "@loader_path;@loader_path/deps/lib;@loader_path/deps/lib64")
   set(CMAKE_BUILD_RPATH "@loader_path;@loader_path/deps/lib;@loader_path/deps/lib64")
 else ()
-  # set(CMAKE_SKIP_BUILD_RPATH  True)
-  set(CMAKE_BUILD_WITH_INSTALL_RPATH True)
+  set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+  set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+  set(CMAKE_BUILD_RPATH "\$ORIGIN:\$ORIGIN/deps/lib:\$ORIGIN/deps/lib64")
   set(CMAKE_INSTALL_RPATH "\$ORIGIN:\$ORIGIN/deps/lib:\$ORIGIN/deps/lib64")
-  set(CMAKE_BUILD_RPATH_USE_ORIGIN True)
 endif ()
 
 option(ENABLE_FFTW "Using fftw3" OFF)
@@ -198,7 +214,7 @@ if(BUILD_LIBCINT)
   # The following is not needed for out-of-source build with scikit-build-core.
   set_target_properties(cint
     PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/lib
+    LIBRARY_OUTPUT_DIRECTORY ${PYSCF_THIRDPARTY_LIBOUTDIR}
   )
 
   message("libcint source dir: ${cint_SOURCE_DIR}")
@@ -208,10 +224,10 @@ else() # BUILD_LIBCINT
   find_package(cint REQUIRED)
 endif()
 
-option(ENABLE_LIBXC "Using libxc for XC functional library" ON)
-option(ENABLE_XCFUN "Using xcfun for XC functional library" ON)
-option(BUILD_LIBXC "Download and build libxc library" ON)
-option(BUILD_XCFUN "Download and build xcfun library" ON)
+option(ENABLE_LIBXC "Using libxc for XC functional library" OFF)
+option(ENABLE_XCFUN "Using xcfun for XC functional library" OFF)
+option(BUILD_LIBXC "Download and build libxc library" OFF)
+option(BUILD_XCFUN "Download and build xcfun library" OFF)
 
 option(ENABLE_LIBXSMM "Using libxsmm" OFF)
 option(BUILD_LIBXSMM "Building libxsmm" OFF)
@@ -244,7 +260,7 @@ if(ENABLE_LIBXC)
 
     set_target_properties(xc
       PROPERTIES
-      LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/lib
+      LIBRARY_OUTPUT_DIRECTORY ${PYSCF_THIRDPARTY_LIBOUTDIR}
     )
   
   else()
@@ -275,7 +291,7 @@ if(ENABLE_XCFUN)
 
   set_target_properties(xcfun
     PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/lib
+    LIBRARY_OUTPUT_DIRECTORY ${PYSCF_THIRDPARTY_LIBOUTDIR}
   )
 
   else()
@@ -323,34 +339,16 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/cmake.user.inc")
   include("${PROJECT_SOURCE_DIR}/cmake.user.inc")
 endif()
 
-add_subdirectory(np_helper)
-add_subdirectory(gto)
-add_subdirectory(vhf)
-add_subdirectory(ao2mo)
-add_subdirectory(mcscf)
-add_subdirectory(cc)
-add_subdirectory(ri)
-add_subdirectory(pbc)
-add_subdirectory(agf2)
+
 
 # The following install commands are used when scikit-build-core
 # is building a wheel.
 if(DEFINED SKBUILD)
-  install(TARGETS np_helper cgto cvhf ao2mo mcscf cc ri pbc agf2 fci dft)
-
-  if(ENABLE_XCFUN)
-    install(TARGETS xcfun_itrf)
-  endif()
-
   if(BUILD_XCFUN)
     set_target_properties(xcfun PROPERTIES NO_SONAME 1)
     install(TARGETS xcfun
-    LIBRARY DESTINATION lib/deps/lib
-    PUBLIC_HEADER DESTINATION lib/deps/include)
-  endif()
-
-  if(ENABLE_LIBXC)
-    install(TARGETS xc_itrf)
+    LIBRARY DESTINATION deps/lib
+    PUBLIC_HEADER DESTINATION deps/include)
   endif()
 
   if(BUILD_LIBXC)
@@ -363,7 +361,30 @@ if(DEFINED SKBUILD)
   if(BUILD_LIBCINT)
     set_target_properties(cint PROPERTIES NO_SONAME 1)
     install(TARGETS cint
-    DESTINATION lib/deps/lib)
+    LIBRARY DESTINATION lib/deps/lib)
+  endif()
+endif()
+
+add_subdirectory(np_helper)
+add_subdirectory(gto)
+add_subdirectory(vhf)
+add_subdirectory(ao2mo)
+add_subdirectory(mcscf)
+add_subdirectory(cc)
+add_subdirectory(ri)
+add_subdirectory(pbc)
+add_subdirectory(agf2)
+
+
+if(DEFINED SKBUILD)
+  install(TARGETS np_helper cgto cvhf ao2mo mcscf cc ri pbc agf2 fci dft
+  LIBRARY DESTINATION lib)
+
+  if(ENABLE_XCFUN)
+    install(TARGETS xcfun_itrf LIBRARY DESTINATION lib)
   endif()
 
+  if(ENABLE_LIBXC)
+    install(TARGETS xc_itrf LIBRARY DESTINATION lib)
+  endif()
 endif()
