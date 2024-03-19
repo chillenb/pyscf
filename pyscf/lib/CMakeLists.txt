@@ -14,6 +14,7 @@
 
 cmake_minimum_required (VERSION 3.14)
 project (pyscf)
+set(CMAKE_POLICY_DEFAULT_CMP0077 NEW) # option() honors normal variables that already exist
 
 include(FetchContent)
 
@@ -29,8 +30,11 @@ set(PYSCF_THIRDPARTY_LIBOUTDIR ${PYSCF_LIBOUTDIR_ROOT}/deps/lib)
 
 
 if (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
+  set(CMAKE_BUILD_TYPE "Release")
 endif()
+
+option(PYSCF_DEBINFO "Include debugging information in PySCF libraries (not libcint, libxc, libxcfun)" TRUE)
+
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 if (CMAKE_COMPILER_IS_GNUCC) # Does it skip the link flag on old OsX?
   # TODO: If updating to minimum requirement cmake>=3.7, use
@@ -41,7 +45,7 @@ if (CMAKE_COMPILER_IS_GNUCC) # Does it skip the link flag on old OsX?
     set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--no-as-needed")
   endif()
 endif()
-set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
+set(PYSCF_CFLAGS_APPENDS "-Wall")
 set(CMAKE_C_STANDARD 99)
 
 option(BUILD_MARCH_NATIVE "gcc flag -march=native" off)
@@ -51,12 +55,12 @@ if (BUILD_MARCH_NATIVE)
   if(COMPILER_SUPPORTS_MARCH_NATIVE)
     if ("${CMAKE_C_COMPILER_ID}" STREQUAL "Intel")
       message("Add CFLAGS -march=native -unroll-aggressive")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -unroll-aggressive -ipo")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-math-errno")
+      string(APPEND PYSCF_CFLAGS_APPENDS " -unroll-aggressive -ipo")
+      string(APPEND PYSCF_CFLAGS_APPENDS " -fno-math-errno")
     else()
-      message("Add CFLAGS -march=native -ftree-vectorize")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native -funroll-loops -ftree-vectorize")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-math-errno")
+      message("Add CFLAGS -march=native -mtune=native -ftree-vectorize")
+      string(APPEND PYSCF_CFLAGS_APPENDS " -march=native -mtune=native -funroll-loops -ftree-vectorize")
+      string(APPEND PYSCF_CFLAGS_APPENDS " -fno-math-errno")
     endif()
   endif()
 else()
@@ -65,11 +69,13 @@ else()
     CHECK_C_COMPILER_FLAG("-msse3" COMPILER_SUPPORTS_SSE3)
     if(COMPILER_SUPPORTS_SSE3)
       # Avoids error "‘SIMDD’ undeclared here (not in a function)" in the qcint two-electron integral interface
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse3")
+      string(APPEND PYSCF_CFLAGS_APPENDS " -msse3")
     endif()
   endif()
 endif()
 
+string(APPEND CMAKE_C_FLAGS " ${PYSCF_CFLAGS_APPENDS}")
+string(APPEND CMAKE_CXX_FLAGS " ${PYSCF_CFLAGS_APPENDS}")
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
@@ -119,9 +125,12 @@ if(ENABLE_OPENMP)
   endif()
 endif()
 
-if(NOT XCFUN_MAX_ORDER)
-  set(XCFUN_MAX_ORDER 3)
-endif()
+# if(NOT DEFINED XCFUN_MAX_ORDER)
+#   set(XCFUN_MAX_ORDER 3)
+# endif()
+set(XCFUN_MAX_ORDER 3 CACHE STRING "XCFun maximum derivative order")
+
+set(PYSCF_LIBXC_MAX_ORDER 3 CACHE STRING "Libxc maximum derivative order")
 
 #find_package(PythonInterp REQUIRED)
 #find_package(PythonLibs REQUIRED)
@@ -190,23 +199,22 @@ if(BUILD_LIBCINT)
   set(WITH_CINT2_INTERFACE 0)
   set(MIN_EXPCUTOFF 20)
   set(KEEP_GOING 1)
-  
 
-# The following parameters do not need to be set anymore
-# thanks to the use of FetchContent.
-# 
-#         -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-#         -DCMAKE_INSTALL_LIBDIR:PATH=lib
-#         -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
-#         -DBLAS_LIBRARIES:STRING=${BLAS_LIBRARIES}
-#         -DCMAKE_C_CREATE_SHARED_LIBRARY:STRING=${C_LINK_TEMPLATE}
-#         -DBUILD_MARCH_NATIVE:STRING=${BUILD_MARCH_NATIVE}
+  # The following parameters do not need to be set manually for libcint
+  # thanks to the use of FetchContent.
+
+  #         -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+  #         -DCMAKE_INSTALL_LIBDIR:PATH=lib
+  #         -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
+  #         -DBLAS_LIBRARIES:STRING=${BLAS_LIBRARIES}
+  #         -DCMAKE_C_CREATE_SHARED_LIBRARY:STRING=${C_LINK_TEMPLATE}
+  #         -DBUILD_MARCH_NATIVE:STRING=${BUILD_MARCH_NATIVE}
 
 
   FetchContent_GetProperties(cint)
   if(NOT cint_POPULATED)
     FetchContent_Populate(cint)
-    # EXCLUDE_FROM_ALL means not to use the install commands from libcint.
+    # EXCLUDE_FROM_ALL means not to use the install commands from libcint's CMakeLists.txt.
     add_subdirectory(${cint_SOURCE_DIR} ${cint_BINARY_DIR} EXCLUDE_FROM_ALL)
   endif()
 
@@ -224,10 +232,10 @@ else() # BUILD_LIBCINT
   find_package(cint REQUIRED)
 endif()
 
-option(ENABLE_LIBXC "Using libxc for XC functional library" OFF)
-option(ENABLE_XCFUN "Using xcfun for XC functional library" OFF)
-option(BUILD_LIBXC "Download and build libxc library" OFF)
-option(BUILD_XCFUN "Download and build xcfun library" OFF)
+option(ENABLE_LIBXC "Using libxc for XC functional library" ON)
+option(ENABLE_XCFUN "Using xcfun for XC functional library" ON)
+option(BUILD_LIBXC "Download and build libxc library" ON)
+option(BUILD_XCFUN "Download and build xcfun library" ON)
 
 option(ENABLE_LIBXSMM "Using libxsmm" OFF)
 option(BUILD_LIBXSMM "Building libxsmm" OFF)
@@ -245,10 +253,27 @@ if(ENABLE_LIBXC)
       URL https://gitlab.com/libxc/libxc/-/archive/6.1.0/libxc-6.1.0.tar.gz
     )
     set(ENABLE_FORTRAN 0)
+
+    # Set the maximum order of derivatives for libxc.
+    set(DISABLE_VXC OFF)
+    set(DISABLE_FXC OFF)
     set(DISABLE_KXC OFF)
-    set(DISABLE_LXC ON)
+    set(DISABLE_LXC OFF)
+    if(PYSCF_LIBXC_MAX_ORDER LESS 1)
+      set(DISABLE_VXC ON)
+    endif()
+    if(PYSCF_LIBXC_MAX_ORDER LESS 2)
+      set(DISABLE_FXC ON)
+    endif()
+    if(PYSCF_LIBXC_MAX_ORDER LESS 3)
+      set(DISABLE_KXC ON)
+    endif()
+    if(PYSCF_LIBXC_MAX_ORDER LESS 4)
+      set(DISABLE_LXC ON)
+    endif()
+
     set(ENABLE_XHOST ${BUILD_MARCH_NATIVE})
-    #set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 
     FetchContent_GetProperties(xc)
     if(NOT xc_POPULATED)
@@ -308,28 +333,45 @@ if(ENABLE_LIBXSMM AND BUILD_LIBXSMM)
       GIT_REPOSITORY https://github.com/hfp/libxsmm.git
       GIT_TAG 1.17
       PREFIX ${PROJECT_BINARY_DIR}/deps
-      INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
+      INSTALL_DIR ${PYSCF_LIBOUTDIR_ROOT}/deps
       CONFIGURE_COMMAND ""
       BUILD_IN_SOURCE True
-      BUILD_COMMAND make -j4 PREFIX=<INSTALL_DIR> CXX=${CMAKE_CXX_COMPILER} CC=${CMAKE_C_COMPILER} STATIC=0 MALLOC=0 INTRINSICS=2 install
+      BUILD_COMMAND make -j PREFIX=<INSTALL_DIR> CXX=${CMAKE_CXX_COMPILER} CC=${CMAKE_C_COMPILER} STATIC=0 MALLOC=0 INTRINSICS=2 install
       INSTALL_COMMAND ""
+      BUILD_BYPRODUCTS ${PYSCF_LIBOUTDIR_ROOT}/deps/lib/${CMAKE_SHARED_LIBRARY_PREFIX}xsmm.${CMAKE_SHARED_LIBRARY_SUFFIX}
     )
+    add_library(xsmm SHARED IMPORTED GLOBAL)
+    set_target_properties(xsmm PROPERTIES IMPORTED_LOCATION ${PYSCF_THIRDPARTY_LIBOUTDIR}/${CMAKE_SHARED_LIBRARY_PREFIX}xsmm${CMAKE_SHARED_LIBRARY_SUFFIX})
     add_dependencies(dft libxsmm)
   endif()
 endif()
 
 endif() # DISABLE_DFT
 
+add_subdirectory(pbc)
+
 if(ENABLE_FFTW AND BUILD_FFTW)
 #  if(NOT EXISTS "${PROJECT_SOURCE_DIR}/deps/include/fftw3.h")
     ExternalProject_Add(libfftw3
       URL https://www.fftw.org/fftw-3.3.10.tar.gz
       PREFIX ${PROJECT_BINARY_DIR}/deps
-      INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
+      INSTALL_DIR ${PYSCF_LIBOUTDIR_ROOT}/deps
       BUILD_IN_SOURCE True
-      CONFIGURE_COMMAND ./configure --enable-static=no --enable-shared=yes --enable-threads CXX=${CMAKE_CXX_COMPILER} CC=${CMAKE_C_COMPILER} prefix=<INSTALL_DIR>
-      BUILD_COMMAND make -j4 install
+      CONFIGURE_COMMAND <SOURCE_DIR>/configure 
+      "--enable-static=no"
+      "--enable-shared=yes"
+      "--enable-threads=yes"
+      "CC=${CMAKE_C_COMPILER}"
+      "CFLAGS=${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_RELEASE}"
+      "LDFLAGS=${CMAKE_SHARED_LINKER_FLAGS}"
+      "STRIP=${CMAKE_STRIP}"
+      "prefix=<INSTALL_DIR>"
+      BUILD_COMMAND make -j install
     )
+    add_library(fftw3 SHARED IMPORTED GLOBAL)
+    add_library(fftw3_threads SHARED IMPORTED GLOBAL)
+    set_target_properties(fftw3 PROPERTIES IMPORTED_LOCATION ${PYSCF_THIRDPARTY_LIBOUTDIR}/${CMAKE_SHARED_LIBRARY_PREFIX}fftw3${CMAKE_SHARED_LIBRARY_SUFFIX})
+    set_target_properties(fftw3_threads PROPERTIES IMPORTED_LOCATION ${PYSCF_THIRDPARTY_LIBOUTDIR}/${CMAKE_SHARED_LIBRARY_PREFIX}fftw3_threads${CMAKE_SHARED_LIBRARY_SUFFIX})
     add_dependencies(fft libfftw3)
     add_dependencies(pbc libfftw3)
 #  endif()
@@ -345,23 +387,26 @@ endif()
 # is building a wheel.
 if(DEFINED SKBUILD)
   if(BUILD_XCFUN)
-    set_target_properties(xcfun PROPERTIES NO_SONAME 1)
     install(TARGETS xcfun
-    LIBRARY DESTINATION deps/lib
+    LIBRARY DESTINATION lib/deps/lib
+    NAMELINK_SKIP
     PUBLIC_HEADER DESTINATION deps/include)
   endif()
 
   if(BUILD_LIBXC)
-    set_target_properties(xc PROPERTIES NO_SONAME 1)
     install(TARGETS xc
     LIBRARY DESTINATION lib/deps/lib
+    NAMELINK_SKIP
     PUBLIC_HEADER DESTINATION lib/deps/include)
   endif()
 
   if(BUILD_LIBCINT)
-    set_target_properties(cint PROPERTIES NO_SONAME 1)
+    set_property(TARGET cint PROPERTY VERSION)
     install(TARGETS cint
-    LIBRARY DESTINATION lib/deps/lib)
+    LIBRARY DESTINATION lib/deps/lib
+    NAMELINK_SKIP
+    PUBLIC_HEADER DESTINATION lib/deps/include
+    )
   endif()
 endif()
 
@@ -372,7 +417,6 @@ add_subdirectory(ao2mo)
 add_subdirectory(mcscf)
 add_subdirectory(cc)
 add_subdirectory(ri)
-add_subdirectory(pbc)
 add_subdirectory(agf2)
 
 
