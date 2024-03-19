@@ -1,6 +1,11 @@
+{% set version_match = load_file_regex(
+  load_file="pyscf/_version.py",
+  regex_pattern='(?i)^(__version__) *= *([\'"])v?(?P<value>.+?)\2') %}
+{% set version = version_match[1] %}
+
 package:
   name: "pyscf"
-  version: {{ GIT_DESCRIBE_TAG }}
+  version: {{ version }}
 
 source:
   path: ..
