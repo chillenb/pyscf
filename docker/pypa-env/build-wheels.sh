@@ -13,13 +13,15 @@ else
   MY_BUILD_ARGS="-DWITH_F12=OFF"
 fi
 
+export CFLAGS="${CFLAGS} -pipe -fno-plt"
+
 # In certain versions of auditwheel, some .so files was excluded.
 sed -i '/            if basename(fn) not in needed_libs:/s/basename.*libs/1/' /opt/_internal/pipx/venvs/auditwheel/lib/python*/site-packages/auditwheel/wheel_abi.py
 
 # Compile wheels
 PYVERSION=cp39-cp39
 PYBIN=/opt/python/$PYVERSION/bin
-"${PYBIN}/pip" wheel -v --no-deps --no-clean --config-settings=cmake.args=${MY_BUILD_ARGS} -w /root/wheelhouse $src
+CMAKE_BUILD_PARALLEL_LEVEL=4 "${PYBIN}/pip" wheel -v --no-deps --no-clean --config-settings=cmake.args=${MY_BUILD_ARGS} -w /root/wheelhouse $src
 
 # Bundle external shared libraries into the wheels
 whl=`ls /root/wheelhouse/pyscf-*_x86_64.whl`
