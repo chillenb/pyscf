@@ -288,6 +288,106 @@ def general(mol, mo_coeffs, erifile, auxbasis='weigend+etb', dataname='eri_mo', 
     log.timer('AO->MO CD eri transformation', *time0)
     return erifile
 
+
+def eri_mo_nochol(mol, mo_coeffs, erifile, auxbasis='weigend+etb', dataname='eri_mo',
+                   int3c='int3c2e', aosym='s2ij', mosym='s2', comp=1,
+                   max_memory=MAX_MEMORY, auxmol=None, verbose=logger.NOTE):
+
+    assert (aosym in ('s1', 's2ij'))
+    log = logger.new_logger(mol, verbose)
+    time0 = (logger.process_clock(), logger.perf_counter())
+
+    if auxmol is None:
+        auxmol = make_auxmol(mol, auxbasis)
+
+    int3c = gto.moleintor.ascint3(mol._add_suffix(int3c))
+    atm, bas, env = gto.mole.conc_env(mol._atm, mol._bas, mol._env,
+                                      auxmol._atm, auxmol._bas, auxmol._env)
+    ao_loc = gto.moleintor.make_loc(bas, int3c)
+    nao = ao_loc[mol.nbas]
+    naoaux = ao_loc[-1] - nao
+    
+    if aosym == 's1':
+        nao_pair = nao * nao
+        buflen = max(int(max_memory*.24e6/8/nao_pair/comp), 1)
+        shranges = _guess_shell_ranges_L(auxmol, nao_pair, buflen, 's1')
+        aosym_as_nr_e2 = 's1'
+    else:
+        nao_pair = nao * (nao+1) // 2
+        buflen = max(int(max_memory*.24e6/8/nao_pair/comp), 1)
+        shranges = _guess_shell_ranges_L(auxmol, nao_pair, buflen, 's2ij')
+        aosym_as_nr_e2 = 's2kl'
+
+    ijmosym, nij_pair, moij, ijshape = \
+            ao2mo.incore._conc_mos(mo_coeffs[0], mo_coeffs[1], mosym != 's1')
+    print(ijmosym)
+    print(nij_pair)
+    
+    print(shranges)
+    log.debug('erifile %.8g MB, IO buf size %.8g MB',
+              naoaux*nao_pair*8/1e6, comp*buflen*naoaux*8/1e6)
+    log.debug1('shranges = %s', shranges)
+    # TODO: Libcint-3.14 and newer version support to compute int3c2e without
+    # the opt for the 3rd index.
+    #if '3c2e' in int3c:
+    #    cintopt = gto.moleintor.make_cintopt(atm, mol._bas, env, int3c)
+    #else:
+    #    cintopt = gto.moleintor.make_cintopt(atm, bas, env, int3c)
+    cintopt = gto.moleintor.make_cintopt(atm, bas, env, int3c)
+    bufs1 = numpy.empty((comp*max([x[2] for x in shranges]), nao_pair))
+    bufs2 = numpy.empty_like(bufs1)
+    print(bufs1.shape)
+
+    def process(sh_range):
+        nonlocal bufs1, bufs2
+        bufs2, bufs1 = bufs1, bufs2
+        bstart, bend, nrow = sh_range
+        shls_slice = (0, mol.nbas, 0, mol.nbas, mol.nbas+bstart, mol.nbas+bend)
+        ints = gto.moleintor.getints3c(int3c, atm, bas, env, shls_slice, comp,
+                                       aosym, ao_loc, cintopt, out=bufs1)
+        if ints.flags.f_contiguous:
+            ints = ints.T
+        if comp == 1:
+            ints = _ao2mo.nr_e2(ints, moij, ijshape, aosym=aosym_as_nr_e2, mosym=ijmosym)
+            return ints
+        else:
+            ints = _ao2mo.nr_e2(ints.reshape(comp*nrow, nao_pair),
+                               moij, ijshape, aosym=aosym_as_nr_e2, mosym=ijmosym)
+            return ints.reshape(comp, nrow, nij_pair)
+
+    feri = _create_h5file(erifile, dataname)
+    
+    if comp == 1:
+        dshape = (naoaux, nij_pair)
+    else:
+        dshape = (comp, naoaux, nij_pair)
+    
+    h5d_eri = feri.create_dataset(dataname, dshape, 'f8')
+
+    row = 0
+    for istep, dat in enumerate(lib.map_with_prefetch(process, shranges)):
+        sh_range = shranges[istep]
+        bstart, bend, nrow = sh_range
+        if comp == 1:
+            h5d_eri.write_direct(dat, dest_sel=numpy.s_[row:row+nrow], source_sel=numpy.s_[:,:nij_pair])
+        else:
+            h5d_eri.write_direct(dat, dest_sel=numpy.s[:, row:row+nrow], source_sel=numpy.s_[:,:,nij_pair])
+        dat = None
+        row += nrow
+        log.debug('int3c2e [%d/%d], AO [%d:%d], nrow = %d',
+                  istep+1, len(shranges), *sh_range)
+        time0 = log.timer('gen mo eri [%d/%d]' % (istep+1,len(shranges)), *time0)
+    bufs1 = None
+    bufs2 = None
+    feri.flush()
+    feri.close()
+    return erifile
+
+def _guess_shell_ranges_L(auxmol, nao_pair, buflen, aosym, start=0, stop=None):
+    from pyscf.ao2mo.outcore import balance_partition
+    auxao_loc = auxmol.ao_loc_nr()
+    return balance_partition(auxao_loc, buflen, start, stop)
+
 def _guess_shell_ranges(mol, buflen, aosym, start=0, stop=None):
     from pyscf.ao2mo.outcore import balance_partition
     ao_loc = mol.ao_loc_nr()

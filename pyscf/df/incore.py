@@ -195,6 +195,90 @@ def cholesky_eri(mol, auxbasis='weigend+etb', auxmol=None,
     log.timer('cholesky_eri', *t0)
     return cderi
 
+def eri_mo_nochol(mol, mo_coeffs, auxbasis='weigend+etb', dataname='eri_mo',
+                   int3c='int3c2e', aosym='s2ij', mosym='s2', comp=1,
+                   max_memory=MAX_MEMORY, auxmol=None, verbose=logger.NOTE):
+    
+    from pyscf.df.outcore import _guess_shell_ranges_L
+    from pyscf import ao2mo
+    assert (aosym in ('s1', 's2ij'))
+    assert (mosym in ('s1', 's2'))
+    log = logger.new_logger(mol, verbose)
+    time0 = (logger.process_clock(), logger.perf_counter())
+    time1 = time0
+
+    if auxmol is None:
+        auxmol = addons.make_auxmol(mol, auxbasis)
+
+    int3c = gto.moleintor.ascint3(mol._add_suffix(int3c))
+    atm, bas, env = gto.mole.conc_env(mol._atm, mol._bas, mol._env,
+                                      auxmol._atm, auxmol._bas, auxmol._env)
+    ao_loc = gto.moleintor.make_loc(bas, int3c)
+    nao = ao_loc[mol.nbas]
+    naoaux = ao_loc[-1] - nao
+    
+    if aosym == 's1':
+        nao_pair = nao * nao
+        buflen = max(int(max_memory*.24e6/8/nao_pair/comp), 1)
+        shranges = _guess_shell_ranges_L(auxmol, nao_pair, buflen, 's1')
+        aosym_as_nr_e2 = 's1'
+    else:
+        nao_pair = nao * (nao+1) // 2
+        buflen = max(int(max_memory*.24e6/8/nao_pair/comp), 1)
+        shranges = _guess_shell_ranges_L(auxmol, nao_pair, buflen, 's2ij')
+        aosym_as_nr_e2 = 's2kl'
+
+    ijmosym, nij_pair, moij, ijshape = \
+            ao2mo.incore._conc_mos(mo_coeffs[0], mo_coeffs[1])
+    
+    nmoi = mo_coeffs[0].shape[1]
+    nmoj = mo_coeffs[1].shape[1]      
+
+    log.debug1('shranges = %s', shranges)
+    # TODO: Libcint-3.14 and newer version support to compute int3c2e without
+    # the opt for the 3rd index.
+    #if '3c2e' in int3c:
+    #    cintopt = gto.moleintor.make_cintopt(atm, mol._bas, env, int3c)
+    #else:
+    #    cintopt = gto.moleintor.make_cintopt(atm, bas, env, int3c)
+    cintopt = gto.moleintor.make_cintopt(atm, bas, env, int3c)
+    bufs1 = numpy.empty((comp*max([x[2] for x in shranges]), nao_pair))
+    bufs2 = numpy.empty_like(bufs1)
+    
+    if comp == 1:
+        dshape = (naoaux, nij_pair)
+    else:
+        dshape = (comp, naoaux, nij_pair)
+    
+    eri = numpy.empty(dshape)
+    if mosym == 's1':
+        eri = eri.reshape(-1, nmoi, nmoj)
+
+    row = 0
+    for istep, sh_range in enumerate(shranges):
+        bufs2, bufs1 = bufs1, bufs2
+        bstart, bend, nrow = sh_range
+        shls_slice = (0, mol.nbas, 0, mol.nbas, mol.nbas+bstart, mol.nbas+bend)
+        ints = gto.moleintor.getints3c(int3c, atm, bas, env, shls_slice, comp,
+                                       aosym, ao_loc, cintopt, out=bufs1)
+        if ints.flags.f_contiguous:
+            ints = ints.T
+        if comp == 1:
+            ao2mo._ao2mo.nr_e2(ints, moij, ijshape, aosym=aosym_as_nr_e2, mosym=ijmosym, out=eri[row:row+nrow])
+        else:
+            ao2mo._ao2mo.nr_e2(ints.reshape(comp*nrow, nao_pair),
+                               moij, ijshape, aosym=aosym_as_nr_e2, mosym=ijmosym, out=eri[:,row:row+nrow].reshape((comp*nrow, nij_pair)))
+        sh_range = shranges[istep]
+        bstart, bend, nrow = sh_range
+        row += nrow
+        log.debug('int3c2e+MO [%d/%d], aux [%d:%d], nrow = %d',
+                  istep+1, len(shranges), *sh_range)
+        time1 = log.timer('gen mo eri [%d/%d]' % (istep+1,len(shranges)), *time1)
+    bufs1 = None
+    bufs2 = None
+    log.timer('total time', *time0)
+    return eri
+
 # Debug version of cholesky_eri. Note the temporary memory usage is about
 # twice as large as the return cderi array
 def cholesky_eri_debug(mol, auxbasis='weigend+etb', auxmol=None,
