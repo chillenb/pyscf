@@ -49,7 +49,8 @@ def full(mol, mo_coeff, erifile, dataname='eri_mo',
 
 def general(mol, mo_coeffs, erifile, dataname='eri_mo',
             intor='int2e_sph', motype='ghf', aosym='s1', comp=None,
-            max_memory=MAX_MEMORY, ioblk_size=IOBLK_SIZE, verbose=logger.debug):
+            max_memory=MAX_MEMORY, ioblk_size=IOBLK_SIZE, verbose=logger.debug,
+            h5f_w_kwargs=None):
     time_0pass = (logger.process_clock(), logger.perf_counter())
     log = logger.new_logger(mol, verbose)
     intor, comp = gto.moleintor._get_intor_and_comp(mol._add_suffix(intor), comp)
@@ -93,13 +94,16 @@ def general(mol, mo_coeffs, erifile, dataname='eri_mo',
                              dtype=numpy.complex128, order='F')
         klshape = (0, nmok, nmok, nmok+nmol)
 
+    if h5f_w_kwargs is None:
+        h5f_w_kwargs = {}
+
     if isinstance(erifile, str):
         if h5py.is_hdf5(erifile):
-            feri = h5py.File(erifile, 'a')
+            feri = h5py.File(erifile, 'a', **h5f_w_kwargs)
             if dataname in feri:
                 del(feri[dataname])
         else:
-            feri = h5py.File(erifile, 'w')
+            feri = h5py.File(erifile, 'w', **h5f_w_kwargs)
     else:
         assert(isinstance(erifile, h5py.Group))
         feri = erifile
@@ -211,7 +215,7 @@ def general_iofree(mol, mo_coeffs, dataname='eri_mo', intor='int2e_sph',
 def half_e1(mol, mo_coeffs, swapfile,
             intor='int2e_sph', aosym='s1', comp=None,
             max_memory=MAX_MEMORY, ioblk_size=IOBLK_SIZE, verbose=logger.WARN,
-            ao2mopt=None):
+            ao2mopt=None, h5f_w_kwargs=None):
     time0 = (logger.process_clock(), logger.perf_counter())
     log = logger.new_logger(mol, verbose)
 
@@ -250,7 +254,10 @@ def half_e1(mol, mo_coeffs, swapfile,
     log.debug('step1: (ij,kl) = (%d,%d), mem cache %.8g MB, iobuf %.8g MB',
               nij_pair, nao_pair, mem_words*16/1e6, iobuf_words*16/1e6)
 
-    fswap = h5py.File(swapfile, 'w')
+    if h5f_w_kwargs is None:
+        h5f_w_kwargs = {}
+
+    fswap = h5py.File(swapfile, 'w', **h5f_w_kwargs)
     for icomp in range(comp):
         fswap.create_group(str(icomp))  # for h5py old version
 

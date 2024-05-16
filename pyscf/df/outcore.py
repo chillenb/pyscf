@@ -40,7 +40,7 @@ LINEAR_DEP_THR = getattr(__config__, 'df_df_DF_lindep', 1e-12)
 
 def cholesky_eri(mol, erifile, auxbasis='weigend+etb', dataname='j3c', tmpdir=None,
                  int3c='int3c2e', aosym='s2ij', int2c='int2c2e', comp=1,
-                 max_memory=MAX_MEMORY, auxmol=None, verbose=logger.NOTE):
+                 max_memory=MAX_MEMORY, auxmol=None, verbose=logger.NOTE, h5f_w_kwargs=None):
     '''3-index density-fitting tensor.
     '''
     assert (aosym in ('s1', 's2ij'))
@@ -55,7 +55,8 @@ def cholesky_eri(mol, erifile, auxbasis='weigend+etb', dataname='j3c', tmpdir=No
         tmpdir = lib.param.TMPDIR
     swapfile = tempfile.NamedTemporaryFile(dir=tmpdir)
     cholesky_eri_b(mol, swapfile.name, auxbasis, dataname,
-                   int3c, aosym, int2c, comp, max_memory, auxmol, verbose=log)
+                   int3c, aosym, int2c, comp, max_memory, auxmol, verbose=log,
+                   h5f_w_kwargs=h5f_w_kwargs)
     fswap = h5py.File(swapfile.name, 'r')
     time1 = log.timer('generate (ij|L) 1 pass', *time0)
 
@@ -66,7 +67,7 @@ def cholesky_eri(mol, erifile, auxbasis='weigend+etb', dataname='j3c', tmpdir=No
     else:
         nao_pair = nao * (nao+1) // 2
 
-    feri = _create_h5file(erifile, dataname)
+    feri = _create_h5file(erifile, dataname, h5f_w_kwargs)
     if comp == 1:
         naoaux = fswap['%s/0'%dataname].shape[0]
         h5d_eri = feri.create_dataset(dataname, (naoaux,nao_pair), 'f8')
@@ -101,7 +102,7 @@ def cholesky_eri(mol, erifile, auxbasis='weigend+etb', dataname='j3c', tmpdir=No
 def cholesky_eri_b(mol, erifile, auxbasis='weigend+etb', dataname='j3c',
                    int3c='int3c2e', aosym='s2ij', int2c='int2c2e', comp=1,
                    max_memory=MAX_MEMORY, auxmol=None, decompose_j2c='CD',
-                   lindep=LINEAR_DEP_THR, verbose=logger.NOTE):
+                   lindep=LINEAR_DEP_THR, verbose=logger.NOTE, h5f_w_kwargs=None):
     '''3-center 2-electron DF tensor. Similar to cholesky_eri while this
     function stores DF tensor in blocks.
 
@@ -188,7 +189,7 @@ def cholesky_eri_b(mol, erifile, auxbasis='weigend+etb', dataname='j3c',
             dat = [transform(x) for x in ints]
         return dat
 
-    feri = _create_h5file(erifile, dataname)
+    feri = _create_h5file(erifile, dataname, h5f_w_kwargs)
     for istep, dat in enumerate(lib.map_with_prefetch(process, shranges)):
         sh_range = shranges[istep]
         label = '%s/%d'%(dataname,istep)
@@ -210,7 +211,8 @@ def cholesky_eri_b(mol, erifile, auxbasis='weigend+etb', dataname='j3c',
 
 def general(mol, mo_coeffs, erifile, auxbasis='weigend+etb', dataname='eri_mo', tmpdir=None,
             int3c='int3c2e', aosym='s2ij', int2c='int2c2e', comp=1,
-            max_memory=MAX_MEMORY, verbose=0, compact=True):
+            max_memory=MAX_MEMORY, verbose=0, compact=True,
+            h5f_w_kwargs=None):
     ''' Transform ij of (ij|L) to MOs.
     '''
     assert (aosym in ('s1', 's2ij'))
@@ -221,7 +223,8 @@ def general(mol, mo_coeffs, erifile, auxbasis='weigend+etb', dataname='eri_mo', 
         tmpdir = lib.param.TMPDIR
     swapfile = tempfile.NamedTemporaryFile(dir=tmpdir)
     cholesky_eri_b(mol, swapfile.name, auxbasis, dataname,
-                   int3c, aosym, int2c, comp, max_memory, verbose=log)
+                   int3c, aosym, int2c, comp, max_memory, verbose=log,
+                   h5f_w_kwargs=h5f_w_kwargs)
     fswap = h5py.File(swapfile.name, 'r')
     time1 = log.timer('AO->MO eri transformation 1 pass', *time0)
 
@@ -238,7 +241,7 @@ def general(mol, mo_coeffs, erifile, auxbasis='weigend+etb', dataname='eri_mo', 
                                    compact and aosym != 's1')
 
     naoaux = fswap['%s/0'%dataname].shape[-2]
-    feri = _create_h5file(erifile, dataname)
+    feri = _create_h5file(erifile, dataname, h5f_w_kwargs)
     if comp == 1:
         h5d_eri = feri.create_dataset(dataname, (naoaux,nij_pair), 'f8')
     else:
@@ -283,17 +286,19 @@ def _guess_shell_ranges(mol, buflen, aosym, start=0, stop=None):
         nao = ao_loc[-1]
         return balance_partition(ao_loc*nao, buflen, start, stop)
 
-def _create_h5file(erifile, dataname):
+def _create_h5file(erifile, dataname, h5f_w_kwargs=None):
+    if h5f_w_kwargs is None:
+        h5f_w_kwargs = {}
     if isinstance(getattr(erifile, 'name', None), str):
         # The TemporaryFile and H5Tmpfile
         erifile = erifile.name
 
     if h5py.is_hdf5(erifile):
-        feri = h5py.File(erifile, 'a')
+        feri = h5py.File(erifile, 'a', **h5f_w_kwargs)
         if dataname in feri:
             del (feri[dataname])
     else:
-        feri = h5py.File(erifile, 'w')
+        feri = h5py.File(erifile, 'w', **h5f_w_kwargs)
     return feri
 
 del (MAX_MEMORY)

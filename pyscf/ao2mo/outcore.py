@@ -114,7 +114,7 @@ def full(mol, mo_coeff, erifile, dataname='eri_mo',
 def general(mol, mo_coeffs, erifile, dataname='eri_mo',
             intor='int2e', aosym='s4', comp=None,
             max_memory=MAX_MEMORY, ioblk_size=IOBLK_SIZE, verbose=logger.WARN,
-            compact=True):
+            compact=True, h5f_w_kwargs=None):
     r'''For the given four sets of orbitals, transfer arbitrary spherical AO
     integrals to MO integrals on the fly.
 
@@ -236,13 +236,16 @@ def general(mol, mo_coeffs, erifile, dataname='eri_mo',
 #    if nij_pair > nkl_pair:
 #        log.warn('low efficiency for AO to MO trans!')
 
+    if h5f_w_kwargs is None:
+        h5f_w_kwargs = {}
+
     if isinstance(erifile, str):
         if h5py.is_hdf5(erifile):
-            feri = h5py.File(erifile, 'a')
+            feri = h5py.File(erifile, 'a', **h5f_w_kwargs)
             if dataname in feri:
                 del (feri[dataname])
         else:
-            feri = h5py.File(erifile, 'w')
+            feri = h5py.File(erifile, 'w', **h5f_w_kwargs)
     else:
         assert (isinstance(erifile, h5py.Group))
         feri = erifile
@@ -267,7 +270,7 @@ def general(mol, mo_coeffs, erifile, dataname='eri_mo',
               float(nij_pair)*nkl_pair*comp, nij_pair*nkl_pair*comp*8/1e6)
 
 # transform e1
-    fswap = lib.H5TmpFile()
+    fswap = lib.H5TmpFile(**h5f_w_kwargs)
     half_e1(mol, mo_coeffs, fswap, intor, aosym, comp, max_memory, ioblk_size,
             log, compact)
 
@@ -342,7 +345,7 @@ def general(mol, mo_coeffs, erifile, dataname='eri_mo',
 def half_e1(mol, mo_coeffs, swapfile,
             intor='int2e', aosym='s4', comp=1,
             max_memory=MAX_MEMORY, ioblk_size=IOBLK_SIZE, verbose=logger.WARN,
-            compact=True, ao2mopt=None):
+            compact=True, ao2mopt=None, h5f_w_kwargs=None):
     r'''Half transform arbitrary spherical AO integrals to MO integrals
     for the given two sets of orbitals
 
@@ -428,10 +431,13 @@ def half_e1(mol, mo_coeffs, swapfile,
         else:
             ao2mopt = _ao2mo.AO2MOpt(mol, intor)
 
+    if h5f_w_kwargs is None:
+        h5f_w_kwargs = {}
+
     if isinstance(swapfile, h5py.Group):
         fswap = swapfile
     else:
-        fswap = lib.H5TmpFile(swapfile)
+        fswap = lib.H5TmpFile(swapfile, **h5f_w_kwargs)
     for icomp in range(comp):
         fswap.create_group(str(icomp)) # for h5py old version
 
@@ -506,7 +512,7 @@ def _transpose_to_h5g(h5group, key, dat, blksize, chunks=None):
 
 def full_iofree(mol, mo_coeff, intor='int2e', aosym='s4', comp=None,
                 max_memory=MAX_MEMORY, ioblk_size=IOBLK_SIZE,
-                verbose=logger.WARN, compact=True):
+                verbose=logger.WARN, compact=True, h5f_w_kwargs=None):
     r'''Transfer arbitrary spherical AO integrals to MO integrals for given orbitals
     This function is a wrap for :func:`ao2mo.outcore.general`.  It's not really
     IO free.  The returned MO integrals are held in memory.  For backward compatibility,
@@ -584,7 +590,9 @@ def full_iofree(mol, mo_coeff, intor='int2e', aosym='s4', comp=None,
     >>> print(eri1.shape)
     (3, 100, 55)
     '''
-    with lib.H5TmpFile() as feri:
+    if h5f_w_kwargs is None:
+        h5f_w_kwargs = {}
+    with lib.H5TmpFile(**h5f_w_kwargs) as feri:
         general(mol, (mo_coeff,)*4, feri, dataname='eri_mo',
                 intor=intor, aosym=aosym, comp=comp,
                 max_memory=max_memory, ioblk_size=ioblk_size,
@@ -593,7 +601,7 @@ def full_iofree(mol, mo_coeff, intor='int2e', aosym='s4', comp=None,
 
 def general_iofree(mol, mo_coeffs, intor='int2e', aosym='s4', comp=None,
                    max_memory=MAX_MEMORY, ioblk_size=IOBLK_SIZE,
-                   verbose=logger.WARN, compact=True):
+                   verbose=logger.WARN, compact=True, h5f_w_kwargs=None):
     r'''For the given four sets of orbitals, transfer arbitrary spherical AO
     integrals to MO integrals on the fly.  This function is a wrap for
     :func:`ao2mo.outcore.general`.  It's not really IO free.  The returned MO
@@ -669,7 +677,7 @@ def general_iofree(mol, mo_coeffs, intor='int2e', aosym='s4', comp=None,
     >>> print(eri1.shape)
     (3, 100, 55)
     '''
-    with lib.H5TmpFile() as feri:
+    with lib.H5TmpFile(**h5f_w_kwargs) as feri:
         general(mol, mo_coeffs, feri, dataname='eri_mo',
                 intor=intor, aosym=aosym, comp=comp,
                 max_memory=max_memory, ioblk_size=ioblk_size,
