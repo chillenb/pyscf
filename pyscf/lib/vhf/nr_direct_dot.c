@@ -102,7 +102,11 @@ void JKOperator_write_back(double *vjk, JKArray *jkarray, int *ao_loc,
                         for (icomp = 0; icomp < ncomp; icomp++) {
                                 for (i = 0; i < di; i++) {
                                 for (j = 0; j < dj; j++) {
+#ifndef PYSCF_ATOMIC_FOCK
                                         pv[i*vcol+j] += pd[i*dj+j];
+#else
+                                        atomic_double_add(&pv[i*vcol+j], pd[i*dj+j]);
+#endif
                                 } }
                                 pv += vrow * vcol;
                                 pd += di * dj;

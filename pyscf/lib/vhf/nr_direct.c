@@ -453,7 +453,9 @@ void CVHFnr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
                 }
                 for (n = 0; n < n_dm; n++) {
                         if (v_priv[n]->stack_size >= size_limit) {
+#ifndef PYSCF_ATOMIC_FOCK
 #pragma omp critical
+#endif
         (*jkop[n]->write_back)(vjk[n], v_priv[n], shls_slice, ao_loc,
                                block_iloc, block_jloc, block_kloc, block_lloc);
                         }
@@ -461,7 +463,9 @@ void CVHFnr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
         }
         for (n = 0; n < n_dm; n++) {
                 if (v_priv[n]->stack_size > 0) {
+#ifndef PYSCF_ATOMIC_FOCK
 #pragma omp critical
+#endif
         (*jkop[n]->write_back)(vjk[n], v_priv[n], shls_slice, ao_loc,
                                block_iloc, block_jloc, block_kloc, block_lloc);
                 }
@@ -609,7 +613,9 @@ void CVHFnr_direct_ex_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
                 }
                 for (n = 0; n < n_dm; n++) {
                         if (v_priv[n]->stack_size >= size_limit) {
+#ifndef PYSCF_ATOMIC_FOCK
 #pragma omp critical
+#endif
         (*jkop[n]->write_back)(vjk[n], v_priv[n], shls_slice, ao_loc,
                                block_iloc, block_jloc, block_kloc, block_lloc);
                         }
@@ -617,7 +623,9 @@ void CVHFnr_direct_ex_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
         }
         for (n = 0; n < n_dm; n++) {
                 if (v_priv[n]->stack_size > 0) {
+#ifndef PYSCF_ATOMIC_FOCK
 #pragma omp critical
+#endif
         (*jkop[n]->write_back)(vjk[n], v_priv[n], shls_slice, ao_loc,
                                block_iloc, block_jloc, block_kloc, block_lloc);
                 }

@@ -17,6 +17,11 @@ add_library(cvhf SHARED
   time_rev.c r_direct_o1.c rkb_screen.c
   r_direct_dot.c rah_direct_dot.c rha_direct_dot.c
   hessian_screen.c nr_sgx_direct.c nr_sr_vhf.c)
+
+if(PYSCF_USE_ATOMIC_FOCK)
+  target_compile_definitions(cvhf PRIVATE USE_ATOMIC_FOCK)
+endif()
+
 add_dependencies(cvhf cgto np_helper)
 
 set_target_properties(cvhf PROPERTIES

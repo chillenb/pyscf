@@ -138,6 +138,7 @@ endif ()
 
 option(ENABLE_FFTW "Using fftw3" OFF)
 option(BUILD_FFTW "Building fftw3" OFF)
+option(PYSCF_USE_ATOMIC_FOCK "Use atomic operations for Fock accumulation" OFF)
 
 add_subdirectory(np_helper)
 add_subdirectory(gto)

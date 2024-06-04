@@ -86,3 +86,38 @@ void CVHFzero_out_vjk(double *vjk, JKOperator *op,
                       int *shls_slice, int *ao_loc, int ncomp);
 void CVHFassemble_v(double *vjk, JKOperator *op, JKArray *jkarray,
                     int *shls_slice, int *ao_loc);
+
+
+#if 1
+#define PYSCF_ATOMIC_FOCK 1
+
+typedef union {
+        uint64_t uint_member;
+        double double_member;
+} double_union_t;
+
+static inline double u64_to_f64(uint64_t u64)
+{
+    double_union_t u;
+    u.uint_member = u64;
+    return u.double_member;
+}
+
+static inline uint64_t f64_to_u64(double f64)
+{
+    double_union_t u;
+    u.double_member = f64;
+    return u.uint_member;
+}
+
+static inline void atomic_double_add(volatile double* dest, double summand)
+{
+    uint64_t old_value_bits, new_value_bits;
+    do {
+        double old_value = *dest;
+        old_value_bits = f64_to_u64(old_value);
+        new_value_bits = f64_to_u64(old_value + summand);
+    } while (!__sync_bool_compare_and_swap((volatile uint64_t*) dest, old_value_bits, new_value_bits));
+}
+
+#endif // PYSCF_ATOMIC_FOCK
