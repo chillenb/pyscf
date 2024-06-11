@@ -22,4 +22,4 @@ add_dependencies(cvhf cgto np_helper)
 set_target_properties(cvhf PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
-target_link_libraries(cvhf cgto np_helper cint ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_link_libraries(cvhf cgto np_helper ${CINT_SONAME} ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})

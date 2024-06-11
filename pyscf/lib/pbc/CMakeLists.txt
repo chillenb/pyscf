@@ -20,7 +20,7 @@ add_dependencies(pbc cgto cvhf np_helper)
 set_target_properties(pbc PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
-target_link_libraries(pbc cgto cint cvhf np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_link_libraries(pbc cgto ${CINT_SONAME} cvhf np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 
 if(ENABLE_FFTW)
 add_library(fft SHARED fft.c)

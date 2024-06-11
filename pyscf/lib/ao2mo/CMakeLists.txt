@@ -19,4 +19,4 @@ add_dependencies(ao2mo cvhf)
 set_target_properties(ao2mo PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
-target_link_libraries(ao2mo cvhf cint np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_link_libraries(ao2mo cvhf ${CINT_SONAME} np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})

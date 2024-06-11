@@ -166,6 +166,12 @@ option(BUILD_LIBCINT "Using libcint for analytical gaussian integral" ON)
 option(WITH_F12 "Compling F12 integrals" ON)
 option(USE_QCINT "Using the qcint library (optimized for x86-64) for gaussian integral evaluation" OFF)
 
+if(USE_QCINT)
+  set(CINT_SONAME "qcint")
+else()
+  set(CINT_SONAME "cint")
+endif()
+
 if(BUILD_LIBCINT)
   set(LIBCINT_GIT https://github.com/sunqm/libcint.git) # libcint is a portable, cross-platform implementation
   set(LIBCINT_VERSION v6.1.1)

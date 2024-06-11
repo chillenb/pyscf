@@ -24,9 +24,9 @@ set_target_properties(dft PROPERTIES
 
 if(ENABLE_LIBXSMM)
   add_definitions(-DHAVE_LIBXSMM)
-  target_link_libraries(dft cvhf cgto cint np_helper pbc xsmm ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+  target_link_libraries(dft cvhf cgto ${CINT_SONAME} np_helper pbc xsmm ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 else()
-  target_link_libraries(dft cvhf cgto cint np_helper pbc ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+  target_link_libraries(dft cvhf cgto ${CINT_SONAME} np_helper pbc ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 endif()
 
 if(ENABLE_LIBXC)

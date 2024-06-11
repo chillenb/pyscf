@@ -22,5 +22,5 @@ add_dependencies(cgto np_helper)
 set_target_properties(cgto PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
-target_link_libraries(cgto cint np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_link_libraries(cgto ${CINT_SONAME} np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 
