@@ -10,7 +10,6 @@ source:
   path: ..
 
 build:
-  number: {{ build }} # [not (linux and x86_64)]
   number: {{ build + 200 }} # [linux and x86_64 and microarch_level == 2]
   number: {{ build + 300 }} # [linux and x86_64 and microarch_level == 3]
   number: {{ build + 400 }} # [linux and x86_64 and microarch_level == 4]
@@ -21,8 +20,7 @@ requirements:
     - cmake
     - make
     - mkl
-    - x86_64-microarch-level {{ microarch_level }} # [linux and x86_64 and microarch_level]
-    - _x86_64-microarch-level {{ microarch_level }} # [linux and x86_64 and microarch_level]
+    - x86_64-microarch-level {{ microarch_level }} # [linux and x86_64 and microarch_level != 1]
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
     - {{ compiler('fortran') }}
