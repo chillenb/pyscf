@@ -2,3 +2,8 @@ python:
   - 3.10
   - 3.11
   - 3.12
+microarch_level:
+  - 1
+  - 2
+  - 3
+  - 4

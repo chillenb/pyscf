@@ -22,6 +22,7 @@ requirements:
     - cmake
     - make
     - mkl
+    - x86_64-microarch-level {{ microarch_level }} # [linux and x86_64]
     - {{ compiler('c') }}
     - {{ compiler('cxx') }}
     - {{ compiler('fortran') }}
