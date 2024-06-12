@@ -819,19 +819,39 @@ class _RSGDFBuilder(Int3cBuilder):
 
     def solve_cderi(self, cd_j2c, j3cR, j3cI):
         j2c, j2c_negative, j2ctag = cd_j2c
-        if j3cI is None:
-            j3c = j3cR.T
-        else:
-            j3c = (j3cR + j3cI * 1j).T
-
         cderi_negative = None
         if j2ctag == 'CD':
-            cderi = scipy.linalg.solve_triangular(j2c, j3c, lower=True, overwrite_b=True)
+            if j3cI is None:
+                cderi = scipy.linalg.solve_triangular(j2c, j3cR.T, lower=True, overwrite_b=True)
+            else:
+                cderi_r = scipy.linalg.solve_triangular(j2c, j3cR.T, lower=True,
+                                                        overwrite_b=True,
+                                                        check_finite=False)
+                lib.numpy_helper.checkfinite_fast(cderi_r)
+                cderi_i = scipy.linalg.solve_triangular(j2c, j3cI.T, lower=True,
+                                                        overwrite_b=True,
+                                                        check_finite=False)
+                lib.numpy_helper.checkfinite_fast(cderi_r)
+                cderi = np.empty_like(cderi_r, dtype=np.complex128)
+                lib.numpy_helper.real_plus_imag(cderi_r, cderi_i, out=cderi)
         else:
-            cderi = lib.dot(j2c, j3c)
+            if j3cI is None:
+                cderi = lib.dot(j2c, j3cR.T)
+            else:
+                cderi_r = lib.dot(j2c, j3cR.T)
+                cderi_i = lib.dot(j2c, j3cI.T)
+                cderi = np.empty_like(j3cR, dtype=np.complex128)
+                lib.numpy_helper.real_plus_imag(cderi_r, cderi_i, out=cderi)
             if j2c_negative is not None:
                 # for low-dimension systems
-                cderi_negative = lib.dot(j2c_negative, j3c)
+                cderi_negative_r = lib.dot(j2c_negative, j3cR.T)
+                lib.numpy_helper.checkfinite_fast(cderi_negative_r)
+                cderi_negative_i = lib.dot(j2c_negative, j3cI.T)
+                cderi_negative = np.empty_like(cderi_negative_r, dtype=np.complex128)
+                lib.numpy_helper.checkfinite_fast(cderi_negative_i)
+                lib.numpy_helper.real_plus_imag(cderi_negative_r,
+                                                cderi_negative_i,
+                                                out=cderi_negative)
         return cderi, cderi_negative
 
     def gen_uniq_kpts_groups(self, j_only, h5swap, kk_idx=None):
