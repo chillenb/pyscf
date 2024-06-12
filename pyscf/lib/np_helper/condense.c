@@ -281,3 +281,12 @@ float NP_fmax(float *a, int nd, int di, int dj)
         } }
         return out;
 }
+
+int NP_isfinite(double *in, size_t n) {
+        int result = 1;
+#pragma omp parallel for reduction(&&:result)
+        for (size_t i = 0; i < n; i++) {
+                result = result && isfinite(in[i]);
+        }
+        return result;
+}
