@@ -64,11 +64,19 @@ void NPomp_dsum_reduce_inplace(double **vec, size_t count);
 void NPomp_dprod_reduce_inplace(double **vec, size_t count);
 void NPomp_zsum_reduce_inplace(double complex **vec, size_t count);
 void NPomp_zprod_reduce_inplace(double complex **vec, size_t count);
+int NP_isfinite(double *in, size_t n);
 
 void NPdset0(double *p, const size_t n);
 void NPzset0(double complex *p, const size_t n);
 void NPdcopy(double *out, const double *in, const size_t n);
 void NPzcopy(double complex *out, const double complex *in, const size_t n);
+
+void NPomp_real_plus_imag(double complex *RESTRICT out, const double *RESTRICT real, const double *RESTRICT imag, const size_t n);
+void NPomp_extract_real(const double complex *RESTRICT in, double *RESTRICT real, const size_t n);
+void NPomp_extract_imag(const double complex *RESTRICT in, double *RESTRICT imag, const size_t n);
+void NPomp_promote_real(double complex *RESTRICT out, const double *RESTRICT real, const size_t n);
+void NPomp_promote_imag(double complex *RESTRICT out, const double *RESTRICT imag, const size_t n);
+void NPomp_axpy_zd(double complex *RESTRICT y, const double *RESTRICT x, const double a_r, const double a_i, const size_t n);
 
 void NPdgemm(const char trans_a, const char trans_b,
              const int m, const int n, const int k,

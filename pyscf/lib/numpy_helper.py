@@ -23,6 +23,7 @@ Extension to numpy and scipy
 import ctypes
 import math
 import numpy
+import scipy
 from pyscf.lib import misc
 from numpy import asarray  # For backward compatibility
 
@@ -1185,6 +1186,165 @@ def ndarray_pointer_2d(array):
     assert array.flags.c_contiguous
     i = numpy.arange(array.shape[0])
     return array.ctypes.data + (i * array.strides[0]).astype(numpy.uintp)
+
+def real_plus_imag(real, imag, out=None):
+    '''Parallel out = real + imag*1j
+
+    Examples:
+
+    >>> x = np.eye(3); y = np.eye(3)
+    >>> out = real_plus_imag(x, y)
+    '''
+
+    if out is None:
+        out = numpy.empty_like(real, dtype=numpy.complex128)
+
+    try:
+        assert real.flags.c_contiguous or real.flags.f_contiguous
+        assert imag.flags.c_contiguous or imag.flags.f_contiguous
+        assert real.shape == imag.shape
+        assert real.flags.c_contiguous == imag.flags.c_contiguous
+        assert out.shape == imag.shape
+        assert out.flags.c_contiguous == imag.flags.c_contiguous
+        assert real.dtype == numpy.float64
+        assert imag.dtype == numpy.float64
+    except AssertionError:
+        msg = 'input arrays must be contiguous and have the same shape and strides'
+        raise ValueError(msg)
+
+    fn = _np_helper.NPomp_real_plus_imag
+
+    fn(out.ctypes.data_as(ctypes.c_void_p),
+       real.ctypes.data_as(ctypes.c_void_p),
+       imag.ctypes.data_as(ctypes.c_void_p),
+       ctypes.c_size_t(out.size))
+    return out
+
+def extract_reim(input, op, out=None):
+    '''Parallel out = real(input) or imag(input)
+    '''
+
+    if out is None:
+        out = numpy.empty_like(input, dtype=numpy.float64)
+
+    try:
+        assert input.flags.c_contiguous or input.flags.f_contiguous
+        assert out.shape == input.shape
+        assert input.flags.c_contiguous == out.flags.c_contiguous
+        assert input.dtype == numpy.complex128
+        assert out.dtype == numpy.float64
+    except AssertionError:
+        msg = 'input arrays must be contiguous and have the same shape and strides'
+        raise ValueError(msg)
+
+    if op == 'real':
+        fn = _np_helper.NPomp_extract_real
+    elif op == 'imag':
+        fn = _np_helper.NPomp_extract_imag
+    else:
+        raise ValueError('op must be either "real" or "imag"')
+
+    fn(out.ctypes.data_as(ctypes.c_void_p),
+       input.ctypes.data_as(ctypes.c_void_p),
+       ctypes.c_size_t(out.size))
+    return out
+
+def extract_real(input, out=None):
+    '''Parallel out = real(input)
+    '''
+    return extract_reim(input, 'real', out)
+
+def extract_imag(input, out=None):
+    '''Parallel out = imag(input)
+    '''
+    return extract_reim(input, 'imag', out)
+
+def promote_real_to_complex(input, component, out=None):
+    """ Parallel out = input + 0j or input*1j
+
+    Parameters
+    ----------
+    input : ndarray
+        The input array
+    component : str
+        The component to promote. Must be either 'real' or 'imag'.
+    out : ndarray, optional
+        The output array. If None, a new array is created.
+
+    Returns
+    -------
+    out : ndarray
+        The output array.
+    """
+    if out is None:
+        out = numpy.empty_like(input, dtype=numpy.complex128)
+
+    try:
+        assert input.flags.c_contiguous or input.flags.f_contiguous
+        assert out.shape == input.shape
+        assert input.flags.c_contiguous == out.flags.c_contiguous
+        assert input.dtype == numpy.float64
+        assert out.dtype == numpy.complex128
+    except AssertionError:
+        msg = 'input arrays must be contiguous and have the same shape and strides'
+        raise ValueError(msg)
+
+    if component == 'real':
+        fn = _np_helper.NPomp_promote_real
+    elif component == 'imag':
+        fn = _np_helper.NPomp_promote_imag
+    else:
+        raise ValueError('component must be either "real" or "imag"')
+
+    fn(out.ctypes.data_as(ctypes.c_void_p),
+       input.ctypes.data_as(ctypes.c_void_p),
+       ctypes.c_size_t(out.size))
+    return out
+
+def axpy_mixed_real_complex(alpha, x, y):
+    """Parallel mixed real and complex AXPY operation
+
+    y += alpha*x,
+    for real x and complex y.
+
+    Parameters
+    ----------
+    alpha : complex
+        The scaling factor
+    x : ndarray
+        array (real)
+    y : ndarray
+        array (complex)
+    """
+    try:
+        assert x.flags.c_contiguous or x.flags.f_contiguous
+        assert y.flags.c_contiguous or y.flags.f_contiguous
+        assert x.flags.c_contiguous == y.flags.c_contiguous
+        assert x.shape == y.shape
+        assert x.dtype == numpy.float64
+        assert y.dtype == numpy.complex128
+    except AssertionError:
+        msg = 'input arrays must be contiguous and have the same shape and strides'
+        raise ValueError(msg)
+    fn = _np_helper.NPomp_axpy_zd
+    fn(y.ctypes.data_as(ctypes.c_void_p),
+       x.ctypes.data_as(ctypes.c_void_p),
+       ctypes.c_double(alpha.real),
+       ctypes.c_double(alpha.imag),
+       ctypes.c_size_t(y.size))
+
+def checkfinite_fast(arr):
+    '''Throw error if array of doubles contains any NaN or Inf.
+
+    Input must be contiguous.
+    '''
+    if not (arr.flags.c_contiguous or arr.flags.f_contiguous):
+        raise ValueError('input array must be contiguous')
+    assert arr.dtype == numpy.float64
+    res = _np_helper.NP_isfinite(arr.ctypes.data_as(ctypes.c_void_p),
+                                    ctypes.c_size_t(arr.size))
+    if res != 1:
+        raise ValueError('array must not contain infs or NaNs')
 
 class NPArrayWithTag(numpy.ndarray):
     # Initialize kwargs in function tag_array
