@@ -45,7 +45,7 @@ void FCIcontract_a_1e_nosym(double *h1e, double *ci0, double *ci1,
         double *pci0, *pci1;
         double tmp;
         _LinkT *tab;
-        _LinkT *clink = malloc(sizeof(_LinkT) * nlinka * nstra);
+        _LinkT *clink = pyscf_malloc(sizeof(_LinkT) * nlinka * nstra);
         FCIcompress_link(clink, link_indexa, norb, nstra, nlinka);
 
         for (str0 = 0; str0 < nstra; str0++) {
@@ -63,7 +63,7 @@ void FCIcontract_a_1e_nosym(double *h1e, double *ci0, double *ci1,
                         }
                 }
         }
-        free(clink);
+        pyscf_free(clink);
 }
 
 void FCIcontract_b_1e_nosym(double *h1e, double *ci0, double *ci1,
@@ -75,7 +75,7 @@ void FCIcontract_b_1e_nosym(double *h1e, double *ci0, double *ci1,
         double *pci1;
         double tmp;
         _LinkT *tab;
-        _LinkT *clink = malloc(sizeof(_LinkT) * nlinkb * nstrb);
+        _LinkT *clink = pyscf_malloc(sizeof(_LinkT) * nlinkb * nstrb);
         FCIcompress_link(clink, link_indexb, norb, nstrb, nlinkb);
 
         for (str0 = 0; str0 < nstra; str0++) {
@@ -92,7 +92,7 @@ void FCIcontract_b_1e_nosym(double *h1e, double *ci0, double *ci1,
                         }
                 }
         }
-        free(clink);
+        pyscf_free(clink);
 }
 
 static void spread_a_t1(double *ci1, double *t1,
@@ -189,8 +189,8 @@ void FCIcontract_2es1(double *eri, double *ci0, double *ci1,
                       int norb, int na, int nb, int nlinka, int nlinkb,
                       int *link_indexa, int *link_indexb)
 {
-        _LinkT *clinka = malloc(sizeof(_LinkT) * nlinka * na);
-        _LinkT *clinkb = malloc(sizeof(_LinkT) * nlinkb * nb);
+        _LinkT *clinka = pyscf_malloc(sizeof(_LinkT) * nlinka * na);
+        _LinkT *clinkb = pyscf_malloc(sizeof(_LinkT) * nlinkb * nb);
         FCIcompress_link(clinka, link_indexa, norb, na, nlinka);
         FCIcompress_link(clinkb, link_indexb, norb, nb, nlinkb);
 
@@ -200,12 +200,16 @@ void FCIcontract_2es1(double *eri, double *ci0, double *ci1,
         shared(eri, ci0, ci1, norb, na, nb, nlinka, nlinkb, \
                clinka, clinkb)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int strk, ib, blen;
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*norb*norb*2+2));
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*norb*norb*2+2));
         double *tmp;
         double *t1 = t1buf;
         double *vt1 = t1buf + norb*norb*STRB_BLKSIZE;
-        double *ci1buf = malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
+        double *ci1buf = pyscf_malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
         for (ib = 0; ib < nb; ib += STRB_BLKSIZE) {
                 blen = MIN(STRB_BLKSIZE, nb-ib);
                 NPdset0(ci1buf, ((size_t)na) * blen);
@@ -224,10 +228,14 @@ void FCIcontract_2es1(double *eri, double *ci0, double *ci1,
                 axpy2d(ci1+ib, ci1buf, na, nb, blen);
 #pragma omp barrier
         }
-        free(ci1buf);
-        free(t1buf);
+        pyscf_free(ci1buf);
+        pyscf_free(t1buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clinka);
-        free(clinkb);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
 }
 

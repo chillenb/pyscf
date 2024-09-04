@@ -157,16 +157,20 @@ void CVHFrkb_q_cond(int (*intor)(), CINTOpt *cintopt, double *qcond,
                                                  atm, natm, bas, nbas, env);
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         double qtmp, tmp;
         int i, j, ij, di, dj, ish, jsh;
         int shls[4];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
         di = 0;
         for (ish = 0; ish < nbas; ish++) {
                 dj = ao_loc[ish+1] - ao_loc[ish];
                 di = MAX(di, dj);
         }
-        double complex *buf = malloc(sizeof(double complex) * di*di*di*di);
+        double complex *buf = pyscf_malloc(sizeof(double complex) * di*di*di*di);
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < nbas*(nbas+1)/2; ij++) {
                 ish = (int)(sqrt(2*ij+.25) - .5 + 1e-7);
@@ -189,8 +193,12 @@ void CVHFrkb_q_cond(int (*intor)(), CINTOpt *cintopt, double *qcond,
                 qcond[ish*nbas+jsh] = qtmp;
                 qcond[jsh*nbas+ish] = qtmp;
         }
-        free(buf);
-        free(cache);
+        pyscf_free(buf);
+        pyscf_free(cache);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -199,9 +207,9 @@ void CVHFrkbllll_direct_scf(CVHFOpt *opt, int (*intor)(), CINTOpt *cintopt,
                             int *bas, int nbas, double *env)
 {
         if (opt->q_cond != NULL) {
-                free(opt->q_cond);
+                pyscf_free(opt->q_cond);
         }
-        opt->q_cond = (double *)malloc(sizeof(double) * nbas*nbas);
+        opt->q_cond = (double *)pyscf_malloc(sizeof(double) * nbas*nbas);
 
         assert(intor == &int2e_spinor);
         CVHFrkb_q_cond(intor, cintopt, opt->q_cond, ao_loc, atm, natm, bas, nbas, env);
@@ -212,9 +220,9 @@ void CVHFrkbssss_direct_scf(CVHFOpt *opt, int (*intor)(), CINTOpt *cintopt,
                             int *bas, int nbas, double *env)
 {
         if (opt->q_cond != NULL) {
-                free(opt->q_cond);
+                pyscf_free(opt->q_cond);
         }
-        opt->q_cond = (double *)malloc(sizeof(double) * nbas*nbas);
+        opt->q_cond = (double *)pyscf_malloc(sizeof(double) * nbas*nbas);
 
         assert(intor == &int2e_spsp1spsp2_spinor);
         CVHFrkb_q_cond(intor, cintopt, opt->q_cond, ao_loc, atm, natm, bas, nbas, env);
@@ -226,9 +234,9 @@ void CVHFrkbssll_direct_scf(CVHFOpt *opt, int (*intor)(), CINTOpt *cintopt,
                             int *bas, int nbas, double *env)
 {
         if (opt->q_cond != NULL) {
-                free(opt->q_cond);
+                pyscf_free(opt->q_cond);
         }
-        opt->q_cond = (double *)malloc(sizeof(double) * nbas*nbas*2);
+        opt->q_cond = (double *)pyscf_malloc(sizeof(double) * nbas*nbas*2);
 
         CVHFrkb_q_cond(&int2e_spinor, NULL, opt->q_cond, ao_loc, atm, natm, bas, nbas, env);
         CVHFrkb_q_cond(&int2e_spsp1spsp2_spinor, NULL, opt->q_cond+nbas*nbas, ao_loc,
@@ -271,9 +279,9 @@ void CVHFrkbllll_direct_scf_dm(CVHFOpt *opt, double complex *dm, int nset,
                                int *bas, int nbas, double *env)
 {
         if (opt->dm_cond != NULL) { // NOT reuse opt->dm_cond because nset may be diff in different call
-                free(opt->dm_cond);
+                pyscf_free(opt->dm_cond);
         }
-        opt->dm_cond = (double *)malloc(sizeof(double)*nbas*nbas*(1+nset));
+        opt->dm_cond = (double *)pyscf_malloc(sizeof(double)*nbas*nbas*(1+nset));
         NPdset0(opt->dm_cond, ((size_t)nbas)*nbas*(1+nset));
         // dmcond followed by dmscond which are max matrix element for each dm
         CVHFrkb_dm_cond(opt->dm_cond, dm, nset, ao_loc, atm, natm, bas, nbas, env);
@@ -284,9 +292,9 @@ void CVHFrkbssss_direct_scf_dm(CVHFOpt *opt, double complex *dm, int nset,
                                int *bas, int nbas, double *env)
 {
         if (opt->dm_cond != NULL) {
-                free(opt->dm_cond);
+                pyscf_free(opt->dm_cond);
         }
-        opt->dm_cond = (double *)malloc(sizeof(double)*nbas*nbas*(1+nset));
+        opt->dm_cond = (double *)pyscf_malloc(sizeof(double)*nbas*nbas*(1+nset));
         NPdset0(opt->dm_cond, ((size_t)nbas)*nbas*(1+nset));
         CVHFrkb_dm_cond(opt->dm_cond, dm, nset, ao_loc, atm, natm, bas, nbas, env);
 }
@@ -338,7 +346,7 @@ void CVHFrkbssll_direct_scf_dm(CVHFOpt *opt, double complex *dm, int nset,
                                int *bas, int nbas, double *env)
 {
         if (opt->dm_cond != NULL) {
-                free(opt->dm_cond);
+                pyscf_free(opt->dm_cond);
         }
         if (nset < 4) {
                 fprintf(stderr, "4 sets of DMs (dmll,dmss,dmsl,dmls) are "
@@ -347,7 +355,7 @@ void CVHFrkbssll_direct_scf_dm(CVHFOpt *opt, double complex *dm, int nset,
         }
         nset = nset / 4;
         size_t nbas2 = nbas * nbas;
-        opt->dm_cond = (double *)malloc(sizeof(double)*nbas2*4*(1+nset));
+        opt->dm_cond = (double *)pyscf_malloc(sizeof(double)*nbas2*4*(1+nset));
         CVHFrkbssll_dm_cond(opt->dm_cond, dm, nset, ao_loc,
                             atm, natm, bas, nbas, env);
 }

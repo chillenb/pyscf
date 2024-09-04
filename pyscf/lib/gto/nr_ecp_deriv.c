@@ -307,7 +307,7 @@ static int _cart_factory(Function_cart intor_cart, double *out, int comp,
         if (cache == NULL) {
                 int cache_size = ECPscalar_cache_size(comp*2, shls,
                                                       atm, natm, bas, nbas, env);
-                stack = malloc(sizeof(double) * cache_size);
+                stack = pyscf_malloc(sizeof(double) * cache_size);
                 cache = stack;
         }
 
@@ -325,7 +325,7 @@ static int _cart_factory(Function_cart intor_cart, double *out, int comp,
         }
 
         if (stack != NULL) {
-                free(stack);
+                pyscf_free(stack);
         }
         return has_value;
 }
@@ -396,7 +396,7 @@ static int _sph_factory(Function_cart intor_cart, double *out, int comp,
         if (cache == NULL) {
                 int cache_size = ECPscalar_cache_size(comp*2+2, shls,
                                                       atm, natm, bas, nbas, env);
-                stack = malloc(sizeof(double) * cache_size);
+                stack = pyscf_malloc(sizeof(double) * cache_size);
                 cache = stack;
         }
 
@@ -412,7 +412,7 @@ static int _sph_factory(Function_cart intor_cart, double *out, int comp,
         }
 
         if (stack != NULL) {
-                free(stack);
+                pyscf_free(stack);
         }
         return has_value;
 }

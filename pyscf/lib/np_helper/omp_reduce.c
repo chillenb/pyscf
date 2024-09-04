@@ -20,6 +20,10 @@
 #include <complex.h>
 #include "config.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define MIN(x, y)       ((x) < (y) ? (x) : (y))
 
 void NPomp_split(size_t *start, size_t *end, size_t n) {

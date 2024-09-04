@@ -29,6 +29,10 @@
 #include "vhf/fblas.h"
 #include "pbc/pbc.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define INTBUFMAX10     8000
 #define OF_CMPLX        2
 
@@ -1080,7 +1084,7 @@ static void approx_bvk_rcond(float *rcond, int *cell0_shls, BVKEnvs *envs_bvk,
         int iL, ish_bvk, iseg0, iseg1, nish;
         int jL, jsh_bvk, jseg0, jseg1, njsh;
 
-        float *cache = malloc(sizeof(float) * nbas*3);
+        float *cache = pyscf_malloc(sizeof(float) * nbas*3);
         for (iL = 0; iL < bvk_ncells; iL++) {
         for (jL = 0; jL < bvk_ncells; jL++) {
                 ish_bvk = iL * nbasp + ish_cell0;
@@ -1095,7 +1099,7 @@ static void approx_bvk_rcond(float *rcond, int *cell0_shls, BVKEnvs *envs_bvk,
                                     atm, natm, bas, nbas, env, cache);
                 rcond += nish * njsh * 3;
         } }
-        free(cache);
+        pyscf_free(cache);
 }
 
 void PBCfill_nr3c_drv(FPtrIntor intor, FPtrFill fill, int is_pbcintor,
@@ -1142,13 +1146,16 @@ void PBCfill_nr3c_drv(FPtrIntor intor, FPtrFill fill, int is_pbcintor,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         CINTEnvVars envs_cint;
         PBCminimal_CINTEnvVars(&envs_cint, atm, natm, bas, nbas, env, cintopt);
 
         int ij;
         int ish, jsh, ksh, ksh_bvk, rij_size;
         int cell0_shls[3];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
         float *rij_cond;
 #pragma omp for schedule(dynamic)
         for (ij = 0; ij < nij; ij++) {
@@ -1161,7 +1168,7 @@ void PBCfill_nr3c_drv(FPtrIntor intor, FPtrFill fill, int is_pbcintor,
                 cell0_shls[0] = ish;
                 cell0_shls[1] = jsh;
                 rij_size = bvk_rcond_size(cell0_shls, &envs_bvk);
-                rij_cond = malloc(sizeof(float) * rij_size*3);
+                rij_cond = pyscf_malloc(sizeof(float) * rij_size*3);
                 approx_bvk_rcond(rij_cond, cell0_shls, &envs_bvk,
                                  atm, natm, bas, nbas, env);
                 for (ksh = ksh0; ksh < ksh1; ksh++) {
@@ -1174,9 +1181,12 @@ void PBCfill_nr3c_drv(FPtrIntor intor, FPtrFill fill, int is_pbcintor,
                         (*fill)(intor, eriR, eriI, cache, cell0_shls, rij_cond,
                                 &envs_cint, &envs_bvk);
                 }
-                free(rij_cond);
+                pyscf_free(rij_cond);
         }
-        free(cache);
+        pyscf_free(cache);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -1399,7 +1409,7 @@ void PBCnr2c_drv(int (*intor)(), void (*fill)(), double complex *out,
         const int jsh0 = shls_slice[2];
         const int jsh1 = shls_slice[3];
         const int njsh = jsh1 - jsh0;
-        double *expkL_r = malloc(sizeof(double) * nimgs*nkpts * OF_CMPLX);
+        double *expkL_r = pyscf_malloc(sizeof(double) * nimgs*nkpts * OF_CMPLX);
         double *expkL_i = expkL_r + nimgs*nkpts;
         int i;
         for (i = 0; i < nimgs*nkpts; i++) {
@@ -1411,21 +1421,27 @@ void PBCnr2c_drv(int (*intor)(), void (*fill)(), double complex *out,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int jsh;
-        double *env_loc = malloc(sizeof(double)*nenv);
+        double *env_loc = pyscf_malloc(sizeof(double)*nenv);
         NPdcopy(env_loc, env, nenv);
         size_t count = nkpts * OF_CMPLX + nimgs;
-        double *buf = malloc(sizeof(double)*(count*INTBUFMAX10*comp+cache_size));
+        double *buf = pyscf_malloc(sizeof(double)*(count*INTBUFMAX10*comp+cache_size));
 #pragma omp for schedule(dynamic)
         for (jsh = 0; jsh < njsh; jsh++) {
                 (*fill)(intor, out, nkpts, comp, nimgs, jsh,
                         buf, env_loc, Ls, expkL_r, expkL_i,
                         shls_slice, ao_loc, cintopt, atm, natm, bas, nbas, env);
         }
-        free(buf);
-        free(env_loc);
+        pyscf_free(buf);
+        pyscf_free(env_loc);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(expkL_r);
+        pyscf_free(expkL_r);
 }
 
 /*
@@ -1437,6 +1453,9 @@ void PBCunpack_tril_triu(double complex *out, double complex *tril,
 {
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int i, j, k, ij;
         size_t nao2 = nao * nao;
         size_t nao_pair = nao * (nao + 1) / 2;
@@ -1455,5 +1474,8 @@ void PBCunpack_tril_triu(double complex *out, double complex *tril,
                         ij++;
                 }
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }

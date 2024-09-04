@@ -28,6 +28,10 @@
 #include "pbc/fill_ints.h"
 #include "pbc/neighbor_list.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define HL_TABLE_SLOTS  7
 //#define ATOM_OF         0
 //#define ANG_OF          1
@@ -155,11 +159,14 @@ void contract_ppnl(void (*fill)(), double* out,
     int dj = GTOmax_shell_dim(ao_loc, shls_slice+2, 1);
     size_t buf_size = di*dj*comp;
 
-    #pragma omp parallel
+#pragma omp parallel
     {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int ish, jsh;
         size_t ij;
-        double *buf = (double*) malloc(sizeof(double) * buf_size);
+        double *buf = (double*) pyscf_malloc(sizeof(double) * buf_size);
         #pragma omp for schedule(dynamic)
         for (ij = 0; ij < nijsh; ij++) {
             ish = ij / njsh;
@@ -167,7 +174,10 @@ void contract_ppnl(void (*fill)(), double* out,
             (*fill)(out, ints, comp, ish, jsh, buf,
                     shls_slice, ao_loc, hl_table, hl_data, nhl, nlopt);
         }
-        free(buf);
+        pyscf_free(buf);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
     }
 }
 
@@ -195,9 +205,12 @@ void contract_ppnl_ip1(double* out, int comp,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
     size_t ib, id, i, p, ic;
     double *pout;
-    double *buf = (double*) malloc(sizeof(double)*buf_size);
+    double *buf = (double*) pyscf_malloc(sizeof(double)*buf_size);
 
     #pragma omp for schedule(dynamic)
     for (p = 0; p < nao; p++){
@@ -240,7 +253,10 @@ void contract_ppnl_ip1(double* out, int comp,
             }
         }
     }
-    free(buf);
+    pyscf_free(buf);
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -375,8 +391,11 @@ void contract_ppnl_nuc_grad(void (*fill)(), double* grad, double* dm, int comp,
     double *ints_ip2[3] = {ppnl_half_ip2_0, ppnl_half_ip2_1, ppnl_half_ip2_2};
 
     double *gradbufs[MAX_THREADS];
-    #pragma omp parallel
+#pragma omp parallel
     {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int ish, jsh;
         size_t ij;
         double *grad_loc;
@@ -384,10 +403,10 @@ void contract_ppnl_nuc_grad(void (*fill)(), double* grad, double* dm, int comp,
         if (thread_id == 0) {
             grad_loc = grad;
         } else {
-            grad_loc = calloc(natm*comp, sizeof(double));
+            grad_loc = pyscf_calloc(natm*comp, sizeof(double));
         }
         gradbufs[thread_id] = grad_loc;
-        double *buf = (double*) malloc(sizeof(double)*buf_size);
+        double *buf = (double*) pyscf_malloc(sizeof(double)*buf_size);
 
         #pragma omp for schedule(dynamic)
         for (ij = 0; ij < nijsh; ij++) {
@@ -398,12 +417,15 @@ void contract_ppnl_nuc_grad(void (*fill)(), double* grad, double* dm, int comp,
                     hl_table, hl_data, nhl, naux,
                     shls_slice, ao_loc, bas, buf, ish, jsh, nlopt);
         }
-        free(buf);
+        pyscf_free(buf);
 
         NPomp_dsum_reduce_inplace(gradbufs, natm*comp);
         if (thread_id != 0) {
-            free(grad_loc);
+            pyscf_free(grad_loc);
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
     }
 }
 
@@ -415,6 +437,9 @@ void pp_loc_part1_gs(double complex* out, double* coulG,
 {
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
     int ig, ia;
     double vlocG, r0, RG;
     double *Gv_loc, *coords_local;
@@ -444,5 +469,8 @@ void pp_loc_part1_gs(double complex* out, double* coulG,
             out[ig] -= (vlocG * cos(RG)) - (vlocG * sin(RG)) * _Complex_I;
         }
     }
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
 }

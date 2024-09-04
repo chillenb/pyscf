@@ -15,6 +15,9 @@
 
 #include <stdlib.h>
 #include "np_helper/np_helper.h"
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
 
 void NPdset0(double *p, const size_t n)
 {
@@ -46,4 +49,31 @@ void NPzcopy(double complex *out, const double complex *in, const size_t n)
         for (i = 0; i < n; i++) {
                 out[i] = in[i];
         }
+}
+
+void* pyscf_malloc(size_t alloc_size)
+{
+#ifdef PYSCF_USE_MKL
+        return mkl_malloc(alloc_size, 64);
+#else
+        return malloc(alloc_size);
+#endif
+}
+
+void *pyscf_calloc(size_t n, size_t size)
+{
+#ifdef PYSCF_USE_MKL
+        return mkl_calloc(n, size, 64);
+#else
+        return calloc(n, size);
+#endif
+}
+
+void pyscf_free(void *ptr)
+{
+#ifdef PYSCF_USE_MKL
+        mkl_free(ptr);
+#else
+        free(ptr);
+#endif
 }

@@ -34,7 +34,7 @@ int int2e_sph();
 void CVHFinit_optimizer(CVHFOpt **opt, int *atm, int natm,
                         int *bas, int nbas, double *env)
 {
-        CVHFOpt *opt0 = (CVHFOpt *)malloc(sizeof(CVHFOpt));
+        CVHFOpt *opt0 = (CVHFOpt *)pyscf_malloc(sizeof(CVHFOpt));
         opt0->nbas = nbas;
         opt0->ngrids = 0;
         opt0->direct_scf_cutoff = 1e-14;
@@ -53,13 +53,13 @@ void CVHFdel_optimizer(CVHFOpt **opt)
         }
 
         if (opt0->q_cond != NULL) {
-                free(opt0->q_cond);
+                pyscf_free(opt0->q_cond);
         }
         if (opt0->dm_cond != NULL) {
-                free(opt0->dm_cond);
+                pyscf_free(opt0->dm_cond);
         }
 
-        free(opt0);
+        pyscf_free(opt0);
         *opt = NULL;
 }
 
@@ -387,14 +387,14 @@ void CVHFsetnr_direct_scf(CVHFOpt *opt, int (*intor)(), CINTOpt *cintopt,
         /* This memory is released in void CVHFdel_optimizer, Don't know
          * why valgrind raises memory leak here */
         if (opt->q_cond != NULL) {
-                free(opt->q_cond);
+                pyscf_free(opt->q_cond);
         }
         // nbas in the input arguments may different to opt->nbas.
         // Use opt->nbas because it is used in the prescreen function
         nbas = opt->nbas;
-        opt->q_cond = (double *)malloc(sizeof(double) * nbas*nbas);
+        opt->q_cond = (double *)pyscf_malloc(sizeof(double) * nbas*nbas);
         if (opt->q_cond == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in CVHFsetnr_direct_scf\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in CVHFsetnr_direct_scf\n",
                         sizeof(double) * nbas*nbas);
                 exit(1);
         }
@@ -414,17 +414,21 @@ void CVHFnr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
                                                  atm, natm, bas, nbas, env);
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         double qtmp, tmp;
         size_t ij, i, j, di, dj, ish, jsh;
         size_t Nbas = nbas;
         int shls[4];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
         di = 0;
         for (ish = 0; ish < nbas; ish++) {
                 dj = ao_loc[ish+1] - ao_loc[ish];
                 di = MAX(di, dj);
         }
-        double *buf = malloc(sizeof(double) * di*di*di*di);
+        double *buf = pyscf_malloc(sizeof(double) * di*di*di*di);
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < Nbas*(Nbas+1)/2; ij++) {
                 ish = (size_t)(sqrt(2*ij+.25) - .5 + 1e-7);
@@ -448,8 +452,12 @@ void CVHFnr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
                 q_cond[ish*nbas+jsh] = qtmp;
                 q_cond[jsh*nbas+ish] = qtmp;
         }
-        free(buf);
-        free(cache);
+        pyscf_free(buf);
+        pyscf_free(cache);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -463,9 +471,9 @@ void CVHFset_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
 void CVHFset_q_cond(CVHFOpt *opt, double *q_cond, int len)
 {
         if (opt->q_cond != NULL) {
-                free(opt->q_cond);
+                pyscf_free(opt->q_cond);
         }
-        opt->q_cond = (double *)malloc(sizeof(double) * len);
+        opt->q_cond = (double *)pyscf_malloc(sizeof(double) * len);
         NPdcopy(opt->q_cond, q_cond, len);
 }
 
@@ -521,14 +529,14 @@ void CVHFsetnr_direct_scf_dm(CVHFOpt *opt, double *dm, int nset, int *ao_loc,
                              int *atm, int natm, int *bas, int nbas, double *env)
 {
         if (opt->dm_cond != NULL) { // NOT reuse opt->dm_cond because nset may be diff in different call
-                free(opt->dm_cond);
+                pyscf_free(opt->dm_cond);
         }
         // nbas in the input arguments may different to opt->nbas.
         // Use opt->nbas because it is used in the prescreen function
         nbas = opt->nbas;
-        opt->dm_cond = (double *)malloc(sizeof(double) * nbas*nbas);
+        opt->dm_cond = (double *)pyscf_malloc(sizeof(double) * nbas*nbas);
         if (opt->dm_cond == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in CVHFsetnr_direct_scf_dm\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in CVHFsetnr_direct_scf_dm\n",
                         sizeof(double) * nbas*nbas);
                 exit(1);
         }
@@ -538,9 +546,9 @@ void CVHFsetnr_direct_scf_dm(CVHFOpt *opt, double *dm, int nset, int *ao_loc,
 void CVHFset_dm_cond(CVHFOpt *opt, double *dm_cond, int len)
 {
         if (opt->dm_cond != NULL) {
-                free(opt->dm_cond);
+                pyscf_free(opt->dm_cond);
         }
-        opt->dm_cond = (double *)malloc(sizeof(double) * len);
+        opt->dm_cond = (double *)pyscf_malloc(sizeof(double) * len);
         NPdcopy(opt->dm_cond, dm_cond, len);
 }
 

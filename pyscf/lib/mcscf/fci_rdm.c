@@ -150,7 +150,7 @@ static void tril_particle_symm(double *rdm2, double *tbra, double *tket,
         int nnorb = norb * norb;
         int i, j, k, m, n;
         int blk = MIN(((int)(48/norb))*norb, nnorb);
-        double *buf = malloc(sizeof(double) * nnorb*bcount);
+        double *buf = pyscf_malloc(sizeof(double) * nnorb*bcount);
         double *p1;
 
         for (n = 0, k = 0; k < bcount; k++) {
@@ -174,7 +174,7 @@ static void tril_particle_symm(double *rdm2, double *tbra, double *tket,
                &alpha, tket+m, &nnorb, buf+m, &nnorb,
                &beta, rdm2+m*nnorb+m, &nnorb);
 
-        free(buf);
+        pyscf_free(buf);
 }
 
 static void _transpose_jikl(double *dm2, int norb)
@@ -182,7 +182,7 @@ static void _transpose_jikl(double *dm2, int norb)
         int nnorb = norb * norb;
         int i, j;
         double *p0, *p1;
-        double *tmp = malloc(sizeof(double)*nnorb*nnorb);
+        double *tmp = pyscf_malloc(sizeof(double)*nnorb*nnorb);
         NPdcopy(tmp, dm2, nnorb*nnorb);
         for (i = 0; i < norb; i++) {
                 for (j = 0; j < norb; j++) {
@@ -191,7 +191,7 @@ static void _transpose_jikl(double *dm2, int norb)
                         NPdcopy(p1, p0, nnorb);
                 }
         }
-        free(tmp);
+        pyscf_free(tmp);
 }
 
 /*
@@ -222,15 +222,19 @@ void FCIrdm12_drv(void (*dm12kernel)(),
         NPdset0(rdm1, nnorb);
         NPdset0(rdm2, nnorb*nnorb);
 
-        _LinkT *clinka = malloc(sizeof(_LinkT) * nlinka * na);
-        _LinkT *clinkb = malloc(sizeof(_LinkT) * nlinkb * nb);
+        _LinkT *clinka = pyscf_malloc(sizeof(_LinkT) * nlinka * na);
+        _LinkT *clinkb = pyscf_malloc(sizeof(_LinkT) * nlinkb * nb);
         FCIcompress_link(clinka, link_indexa, norb, na, nlinka);
         FCIcompress_link(clinkb, link_indexb, norb, nb, nlinkb);
 
 #pragma omp parallel private(strk, i, ib, blen, pdm1, pdm2)
 {
-        pdm1 = calloc(nnorb+2, sizeof(double));
-        pdm2 = calloc(nnorb*nnorb+2, sizeof(double));
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        pdm1 = pyscf_calloc(nnorb+2, sizeof(double));
+        pdm2 = pyscf_calloc(nnorb*nnorb+2, sizeof(double));
 #pragma omp for schedule(dynamic, 40)
         for (strk = 0; strk < na; strk++) {
                 for (ib = 0; ib < nb; ib += BUFBASE) {
@@ -249,11 +253,15 @@ void FCIrdm12_drv(void (*dm12kernel)(),
                 rdm2[i] += pdm2[i];
         }
 }
-        free(pdm1);
-        free(pdm2);
+        pyscf_free(pdm1);
+        pyscf_free(pdm2);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clinka);
-        free(clinkb);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
         switch (symm) {
         case BRAKETSYM:
                 for (i = 0; i < norb; i++) {
@@ -302,7 +310,7 @@ void FCIrdm12kern_sf(double *rdm1, double *rdm2, double *bra, double *ket,
         const double D1 = 1;
         const int nnorb = norb * norb;
         double csum;
-        double *buf = malloc(sizeof(double) * nnorb * bcount);
+        double *buf = pyscf_malloc(sizeof(double) * nnorb * bcount);
 
         csum = FCI_t1ci_sf(ket, buf, bcount, stra_id, strb_id,
                            norb, na, nb, nlinka, nlinkb,
@@ -324,7 +332,7 @@ void FCIrdm12kern_sf(double *rdm1, double *rdm2, double *bra, double *ket,
                                &D1, rdm2, &nnorb);
                 }
         }
-        free(buf);
+        pyscf_free(buf);
 }
 
 /*
@@ -347,7 +355,7 @@ void FCIrdm12kern_spin0(double *rdm1, double *rdm2, double *bra, double *ket,
         const int nnorb = norb * norb;
         int fill0, fill1, i;
         double csum = 0;
-        double *buf = calloc(nnorb * na, sizeof(double));
+        double *buf = pyscf_calloc(nnorb * na, sizeof(double));
 
         if (strb_id+bcount <= stra_id) {
                 fill0 = bcount;
@@ -385,7 +393,7 @@ void FCIrdm12kern_spin0(double *rdm1, double *rdm2, double *bra, double *ket,
                                &D1, rdm2, &nnorb);
                 }
         }
-        free(buf);
+        pyscf_free(buf);
 }
 
 
@@ -405,8 +413,8 @@ void FCItdm12kern_sf(double *tdm1, double *tdm2, double *bra, double *ket,
         const double D1 = 1;
         const int nnorb = norb * norb;
         double csum;
-        double *buf0 = malloc(sizeof(double) * nnorb*bcount);
-        double *buf1 = malloc(sizeof(double) * nnorb*bcount);
+        double *buf0 = pyscf_malloc(sizeof(double) * nnorb*bcount);
+        double *buf1 = pyscf_malloc(sizeof(double) * nnorb*bcount);
 
         csum = FCI_t1ci_sf(bra, buf1, bcount, stra_id, strb_id,
                            norb, na, nb, nlinka, nlinkb,
@@ -428,8 +436,8 @@ void FCItdm12kern_sf(double *tdm1, double *tdm2, double *bra, double *ket,
                        &D1, tdm2, &nnorb);
         }
 _normal_end:
-        free(buf0);
-        free(buf1);
+        pyscf_free(buf0);
+        pyscf_free(buf1);
 }
 
 
@@ -450,7 +458,7 @@ void FCIrdm12kern_a(double *rdm1, double *rdm2, double *bra, double *ket,
         const double D1 = 1;
         const int nnorb = norb * norb;
         double csum;
-        double *buf = calloc(nnorb*bcount, sizeof(double));
+        double *buf = pyscf_calloc(nnorb*bcount, sizeof(double));
 
         csum = FCIrdm2_a_t1ci(ket, buf, bcount, stra_id, strb_id,
                               norb, nb, nlinka, clink_indexa);
@@ -471,7 +479,7 @@ void FCIrdm12kern_a(double *rdm1, double *rdm2, double *bra, double *ket,
                                &D1, rdm2, &nnorb);
                 }
         }
-        free(buf);
+        pyscf_free(buf);
 }
 /*
  * 2pdm kernel for  beta^i beta_j | ci0 >
@@ -488,7 +496,7 @@ void FCIrdm12kern_b(double *rdm1, double *rdm2, double *bra, double *ket,
         const double D1 = 1;
         const int nnorb = norb * norb;
         double csum;
-        double *buf = calloc(nnorb*bcount, sizeof(double));
+        double *buf = pyscf_calloc(nnorb*bcount, sizeof(double));
 
         csum = FCIrdm2_b_t1ci(ket, buf, bcount, stra_id, strb_id,
                               norb, nb, nlinkb, clink_indexb);
@@ -509,7 +517,7 @@ void FCIrdm12kern_b(double *rdm1, double *rdm2, double *bra, double *ket,
                                &D1, rdm2, &nnorb);
                 }
         }
-        free(buf);
+        pyscf_free(buf);
 }
 
 void FCItdm12kern_a(double *tdm1, double *tdm2, double *bra, double *ket,
@@ -523,8 +531,8 @@ void FCItdm12kern_a(double *tdm1, double *tdm2, double *bra, double *ket,
         const double D1 = 1;
         const int nnorb = norb * norb;
         double csum;
-        double *buf0 = calloc(nnorb*bcount, sizeof(double));
-        double *buf1 = calloc(nnorb*bcount, sizeof(double));
+        double *buf0 = pyscf_calloc(nnorb*bcount, sizeof(double));
+        double *buf1 = pyscf_calloc(nnorb*bcount, sizeof(double));
 
         csum = FCIrdm2_a_t1ci(bra, buf1, bcount, stra_id, strb_id,
                               norb, nb, nlinka, clink_indexa);
@@ -543,8 +551,8 @@ void FCItdm12kern_a(double *tdm1, double *tdm2, double *bra, double *ket,
                        &D1, buf0, &nnorb, buf1, &nnorb, &D1, tdm2, &nnorb);
         }
 _normal_end:
-        free(buf0);
-        free(buf1);
+        pyscf_free(buf0);
+        pyscf_free(buf1);
 }
 
 void FCItdm12kern_b(double *tdm1, double *tdm2, double *bra, double *ket,
@@ -558,8 +566,8 @@ void FCItdm12kern_b(double *tdm1, double *tdm2, double *bra, double *ket,
         const double D1 = 1;
         const int nnorb = norb * norb;
         double csum;
-        double *buf0 = calloc(nnorb*bcount, sizeof(double));
-        double *buf1 = calloc(nnorb*bcount, sizeof(double));
+        double *buf0 = pyscf_calloc(nnorb*bcount, sizeof(double));
+        double *buf1 = pyscf_calloc(nnorb*bcount, sizeof(double));
 
         csum = FCIrdm2_b_t1ci(bra, buf1, bcount, stra_id, strb_id,
                               norb, nb, nlinkb, clink_indexb);
@@ -578,8 +586,8 @@ void FCItdm12kern_b(double *tdm1, double *tdm2, double *bra, double *ket,
                        &D1, buf0, &nnorb, buf1, &nnorb, &D1, tdm2, &nnorb);
         }
 _normal_end:
-        free(buf0);
-        free(buf1);
+        pyscf_free(buf0);
+        pyscf_free(buf1);
 }
 
 void FCItdm12kern_ab(double *tdm1, double *tdm2, double *bra, double *ket,
@@ -592,8 +600,8 @@ void FCItdm12kern_ab(double *tdm1, double *tdm2, double *bra, double *ket,
         const double D1 = 1;
         const int nnorb = norb * norb;
         double csum;
-        double *bufb = calloc(nnorb*bcount, sizeof(double));
-        double *bufa = calloc(nnorb*bcount, sizeof(double));
+        double *bufb = pyscf_calloc(nnorb*bcount, sizeof(double));
+        double *bufa = pyscf_calloc(nnorb*bcount, sizeof(double));
 
         csum = FCIrdm2_a_t1ci(bra, bufa, bcount, stra_id, strb_id,
                               norb, nb, nlinka, clink_indexa);
@@ -605,8 +613,8 @@ void FCItdm12kern_ab(double *tdm1, double *tdm2, double *bra, double *ket,
         dgemm_(&TRANS_N, &TRANS_T, &nnorb, &nnorb, &bcount,
                &D1, bufb, &nnorb, bufa, &nnorb, &D1, tdm2, &nnorb);
 _normal_end:
-        free(bufb);
-        free(bufa);
+        pyscf_free(bufb);
+        pyscf_free(bufa);
 }
 
 /*
@@ -621,7 +629,7 @@ void FCItrans_rdm1a(double *rdm1, double *bra, double *ket,
         int i, a, j, k, str0, str1, sign;
         double *pket, *pbra;
         _LinkT *tab;
-        _LinkT *clink = malloc(sizeof(_LinkT) * nlinka * na);
+        _LinkT *clink = pyscf_malloc(sizeof(_LinkT) * nlinka * na);
         FCIcompress_link(clink, link_indexa, norb, na, nlinka);
 
         NPdset0(rdm1, norb*norb);
@@ -648,7 +656,7 @@ void FCItrans_rdm1a(double *rdm1, double *bra, double *ket,
                         }
                 }
         }
-        free(clink);
+        pyscf_free(clink);
 }
 
 void FCItrans_rdm1b(double *rdm1, double *bra, double *ket,
@@ -659,7 +667,7 @@ void FCItrans_rdm1b(double *rdm1, double *bra, double *ket,
         double *pket, *pbra;
         double tmp;
         _LinkT *tab;
-        _LinkT *clink = malloc(sizeof(_LinkT) * nlinkb * nb);
+        _LinkT *clink = pyscf_malloc(sizeof(_LinkT) * nlinkb * nb);
         FCIcompress_link(clink, link_indexb, norb, nb, nlinkb);
 
         NPdset0(rdm1, norb*norb);
@@ -683,7 +691,7 @@ void FCItrans_rdm1b(double *rdm1, double *bra, double *ket,
                         }
                 }
         }
-        free(clink);
+        pyscf_free(clink);
 }
 
 /*
@@ -697,7 +705,7 @@ void FCImake_rdm1a(double *rdm1, double *cibra, double *ciket,
         double *pci0, *pci1;
         double *ci0 = ciket;
         _LinkT *tab;
-        _LinkT *clink = malloc(sizeof(_LinkT) * nlinka * na);
+        _LinkT *clink = pyscf_malloc(sizeof(_LinkT) * nlinka * na);
         FCIcompress_link(clink, link_indexa, norb, na, nlinka);
 
         NPdset0(rdm1, norb*norb);
@@ -731,7 +739,7 @@ void FCImake_rdm1a(double *rdm1, double *cibra, double *ciket,
                         rdm1[k*norb+j] = rdm1[j*norb+k];
                 }
         }
-        free(clink);
+        pyscf_free(clink);
 }
 
 void FCImake_rdm1b(double *rdm1, double *cibra, double *ciket,
@@ -743,7 +751,7 @@ void FCImake_rdm1b(double *rdm1, double *cibra, double *ciket,
         double *ci0 = ciket;
         double tmp;
         _LinkT *tab;
-        _LinkT *clink = malloc(sizeof(_LinkT) * nlinkb * nb);
+        _LinkT *clink = pyscf_malloc(sizeof(_LinkT) * nlinkb * nb);
         FCIcompress_link(clink, link_indexb, norb, nb, nlinkb);
 
         NPdset0(rdm1, norb*norb);
@@ -775,6 +783,6 @@ void FCImake_rdm1b(double *rdm1, double *cibra, double *ciket,
                         rdm1[k*norb+j] = rdm1[j*norb+k];
                 }
         }
-        free(clink);
+        pyscf_free(clink);
 }
 

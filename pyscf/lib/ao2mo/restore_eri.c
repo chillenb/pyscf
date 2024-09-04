@@ -27,7 +27,7 @@ void AO2MOrestore_nr8to1(double *eri8, double *eri1, int norb)
         size_t i, j, ij;
         size_t d2 = norb * norb;
         size_t d3 = norb * norb * norb;
-        double *buf = malloc(sizeof(double)*npair);
+        double *buf = pyscf_malloc(sizeof(double)*npair);
 
         for (ij = 0, i = 0; i < norb; i++) {
         for (j = 0; j < i+1; j++, ij++) {
@@ -37,7 +37,7 @@ void AO2MOrestore_nr8to1(double *eri8, double *eri1, int norb)
                         NPdcopy(eri1+j*d3+i*d2, eri1+i*d3+j*d2, norb*norb);
                 }
         } }
-        free(buf);
+        pyscf_free(buf);
 }
 
 void AO2MOrestore_nr4to1(double *eri4, double *eri1, int norb)

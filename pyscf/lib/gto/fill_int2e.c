@@ -20,6 +20,7 @@
 #include <math.h>
 #include "config.h"
 #include "cint.h"
+#include "np_helper/np_helper.h"
 
 #define MAX(I,J)        ((I) > (J) ? (I) : (J))
 #define MIN(I,J)        ((I) < (J) ? (I) : (J))
@@ -556,8 +557,12 @@ void GTOnr2e_fill_drv(int (*intor)(), void (*fill)(), int (*fprescreen)(),
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ij, i, j;
-        double *buf = malloc(sizeof(double) * (di*di*di*di*comp + cache_size));
+        double *buf = pyscf_malloc(sizeof(double) * (di*di*di*di*comp + cache_size));
 #pragma omp for nowait schedule(dynamic)
         for (ij = 0; ij < nish*njsh; ij++) {
                 i = ij / njsh;
@@ -565,7 +570,11 @@ void GTOnr2e_fill_drv(int (*intor)(), void (*fill)(), int (*fprescreen)(),
                 (*fill)(intor, fprescreen, eri, buf, comp, i, j, shls_slice,
                         ao_loc, cintopt, atm, natm, bas, nbas, env);
         }
-        free(buf);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 

@@ -25,6 +25,7 @@
 #include "nr_direct.h"
 #include "optimizer.h"
 #include "gto/gto.h"
+#include "np_helper/np_helper.h"
 
 #define MAX(I,J)        ((I) > (J) ? (I) : (J))
 
@@ -124,14 +125,14 @@ void GTO2e_cart_or_sph(int (*intor)(), CINTOpt *cintopt, double *eri, int *ao_lo
 #pragma omp parallel
 {
         int i, j, ij;
-        double *buf = malloc(sizeof(double) * (di*di*nao*nao + cache_size));
+        double *buf = pyscf_malloc(sizeof(double) * (di*di*nao*nao + cache_size));
 #pragma omp for nowait schedule(dynamic, 2)
         for (ij = 0; ij < nbas*(nbas+1)/2; ij++) {
                 i = (int)(sqrt(2*ij+.25) - .5 + 1e-7);
                 j = ij - (i*(i+1)/2);
                 store_ij(intor, eri, buf, i, j, vhfopt, &envs);
         }
-        free(buf);
+        pyscf_free(buf);
 }
         CVHFdel_optimizer(&vhfopt);
 }

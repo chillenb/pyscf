@@ -47,13 +47,13 @@ void AO2MOtranse1_incore_s8(int (*fmmm)(), int row_id,
         int nao = envs->nao;
         size_t npair = (*fmmm)(NULL, NULL, buf, envs, INPUT_IJ);
         size_t ij_pair = (*fmmm)(NULL, NULL, buf, envs, OUTPUTIJ);
-        double *buf0 = malloc(sizeof(double) * npair);
+        double *buf0 = pyscf_malloc(sizeof(double) * npair);
 
 // Note AO2MOnr_e1incore_drv stores ij_start in envs.klsh_start
         NPdunpack_row(npair, row_id+envs->klsh_start, eri_ao, buf0);
         NPdunpack_tril(nao, buf0, buf, 0);
         (*fmmm)(vout+ij_pair*row_id, buf, buf+nao*nao, envs, 0);
-        free(buf0);
+        pyscf_free(buf0);
 }
 
 // ij_start and ij_count for the ij-AO-pair in eri_ao
@@ -78,12 +78,20 @@ void AO2MOnr_e1incore_drv(void (*ftranse2_like)(), int (*fmmm)(),
                nao, i_count, j_count) \
         private(i)
 {
-        double *buf = malloc(sizeof(double) * (nao+i_count) * (nao+j_count));
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        double *buf = pyscf_malloc(sizeof(double) * (nao+i_count) * (nao+j_count));
 #pragma omp for schedule(dynamic)
         for (i = 0; i < ij_count; i++) {
                 (*ftranse2_like)(fmmm, i, vout, eri_ao, buf, &envs);
         }
-        free(buf);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 

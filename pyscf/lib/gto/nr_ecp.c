@@ -6198,7 +6198,7 @@ int ECPscalar_sph(double *out, int *dims, int *shls, int *atm, int natm,
         if (cache == NULL) {
                 int cache_size = ECPscalar_cache_size(comp, shls,
                                                       atm, natm, bas, nbas, env);
-                stack = malloc(sizeof(double) * cache_size);
+                stack = pyscf_malloc(sizeof(double) * cache_size);
                 cache = stack;
         }
 
@@ -6215,7 +6215,7 @@ int ECPscalar_sph(double *out, int *dims, int *shls, int *atm, int natm,
         }
 
         if (stack != NULL) {
-                free(stack);
+                pyscf_free(stack);
         }
         return has_value;
 }
@@ -6241,7 +6241,7 @@ int ECPscalar_cart(double *out, int *dims, int *shls, int *atm, int natm,
         if (cache == NULL) {
                 int cache_size = ECPscalar_cache_size(comp, shls,
                                                       atm, natm, bas, nbas, env);
-                stack = malloc(sizeof(double) * cache_size);
+                stack = pyscf_malloc(sizeof(double) * cache_size);
                 cache = stack;
         }
 
@@ -6260,7 +6260,7 @@ int ECPscalar_cart(double *out, int *dims, int *shls, int *atm, int natm,
         }
 
         if (stack != NULL) {
-                free(stack);
+                pyscf_free(stack);
         }
         return has_value;
 }
@@ -6344,7 +6344,7 @@ static void cart2spinor(double complex *opij, double *gctr, int *dims,
 
 void ECPscalar_optimizer(ECPOpt **opt, int *atm, int natm, int *bas, int nbas, double *env)
 {
-        ECPOpt *opt0 = (ECPOpt *)malloc(sizeof(ECPOpt));
+        ECPOpt *opt0 = (ECPOpt *)pyscf_malloc(sizeof(ECPOpt));
         *opt = opt0;
 
         int *ecpbas = bas + (int)(env[AS_ECPBAS_OFFSET])*BAS_SLOTS;
@@ -6355,7 +6355,7 @@ void ECPscalar_optimizer(ECPOpt **opt, int *atm, int natm, int *bas, int nbas, d
         int npk;
         int i, ib, kp;
 
-        opt0->u_ecp = malloc(sizeof(double) * (1 << LEVEL_MAX) * necpbas);
+        opt0->u_ecp = pyscf_malloc(sizeof(double) * (1 << LEVEL_MAX) * necpbas);
         uk = opt0->u_ecp;
         for (ib = 0; ib < necpbas; ib++) {
                 npk = ecpbas[ib*BAS_SLOTS+NPRIM_OF];
@@ -6386,9 +6386,9 @@ void ECPdel_optimizer(ECPOpt **opt)
         }
 
         if (opt0->u_ecp != NULL) {
-                free(opt0->u_ecp);
+                pyscf_free(opt0->u_ecp);
         }
-        free(opt0);
+        pyscf_free(opt0);
         opt = NULL;
 }
 
@@ -6419,7 +6419,7 @@ int ECPso_cart(double *out, int *dims, int *shls, int *atm, int natm,
         if (cache == NULL) {
                 int cache_size = ECPscalar_cache_size(comp, shls,
                                                       atm, natm, bas, nbas, env);
-                stack = malloc(sizeof(double) * cache_size);
+                stack = pyscf_malloc(sizeof(double) * cache_size);
                 cache = stack;
         }
 
@@ -6440,7 +6440,7 @@ int ECPso_cart(double *out, int *dims, int *shls, int *atm, int natm,
         }
 
         if (stack != NULL) {
-                free(stack);
+                pyscf_free(stack);
         }
         return has_value;
 }
@@ -6468,7 +6468,7 @@ int ECPso_sph(double *out, int *dims, int *shls, int *atm, int natm,
         if (cache == NULL) {
                 int cache_size = ECPscalar_cache_size(comp, shls,
                                                       atm, natm, bas, nbas, env);
-                stack = malloc(sizeof(double) * cache_size);
+                stack = pyscf_malloc(sizeof(double) * cache_size);
                 cache = stack;
         }
 
@@ -6487,7 +6487,7 @@ int ECPso_sph(double *out, int *dims, int *shls, int *atm, int natm,
         }
 
         if (stack != NULL) {
-                free(stack);
+                pyscf_free(stack);
         }
         return has_value;
 }
@@ -6518,7 +6518,7 @@ int ECPso_spinor(double complex *out, int *dims, int *shls, int *atm, int natm,
         if (cache == NULL) {
                 int cache_size = ECPscalar_cache_size(comp, shls,
                                                       atm, natm, bas, nbas, env);
-                stack = malloc(sizeof(double) * (cache_size + ngctr*8*OF_CMPLX));
+                stack = pyscf_malloc(sizeof(double) * (cache_size + ngctr*8*OF_CMPLX));
                 cache = stack;
         }
 
@@ -6537,7 +6537,7 @@ int ECPso_spinor(double complex *out, int *dims, int *shls, int *atm, int natm,
         cart2spinor(out, buf1, dims, shls, bas, cache);
 
         if (stack != NULL) {
-                free(stack);
+                pyscf_free(stack);
         }
         return has_value;
 }

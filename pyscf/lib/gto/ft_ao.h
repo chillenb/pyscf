@@ -46,7 +46,7 @@ typedef struct {
         int lj_ceil;
         int g_stride_i;
         int g_stride_j;
-        int g_size;  // ref to cint2e.c g = malloc(sizeof(double)*g_size)
+        int g_size;  // ref to cint2e.c g = pyscf_malloc(sizeof(double)*g_size)
         double expcutoff;
         double ai[1];
         double aj[1];

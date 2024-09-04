@@ -54,6 +54,10 @@
 #include "gto/ft_ao.h"
 #include "np_helper/np_helper.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define SQRTPI          1.7724538509055160272981674833411451
 #define EXPCUTOFF       60
 #define MIN_EXPCUTOFF   40
@@ -801,9 +805,9 @@ int GTO_ft_aopair_drv(double *outR, double *outI, int *dims,
         double *stack = NULL;
         if (cache == NULL) {
                 size_t cache_size = ft_aopair_cache_size(envs) * (size_t)block_size;
-                stack = malloc(sizeof(double)*cache_size);
+                stack = pyscf_malloc(sizeof(double)*cache_size);
                 if (stack == NULL) {
-                        fprintf(stderr, "gctr = malloc(%zu) failed in GTO_ft_aopair_drv\n",
+                        fprintf(stderr, "gctr = pyscf_malloc(%zu) failed in GTO_ft_aopair_drv\n",
                                 sizeof(double) * cache_size);
                         return 0;
                 }
@@ -837,7 +841,7 @@ int GTO_ft_aopair_drv(double *outR, double *outI, int *dims,
                 }
         }
         if (stack != NULL) {
-                free(stack);
+                pyscf_free(stack);
         }
         return has_value;
 }
@@ -1238,8 +1242,11 @@ void GTO_ft_fill_drv(FPtrIntor intor, FPtr_eval_gz eval_gz, void (*fill)(),
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int i, j, ij;
-        double *buf = malloc(sizeof(double) * (cache_size +
+        double *buf = pyscf_malloc(sizeof(double) * (cache_size +
                                                di*di*comp*BLKSIZE * OF_CMPLX));
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < nish*njsh; ij++) {
@@ -1252,7 +1259,10 @@ void GTO_ft_fill_drv(FPtrIntor intor, FPtr_eval_gz eval_gz, void (*fill)(),
                         comp, i, j, buf, shls_slice, ao_loc, fac,
                         Gv, b, gxyz, gs, nGv, atm, natm, bas, nbas, env);
         }
-        free(buf);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
+        pyscf_free(buf);
 }
 }
 

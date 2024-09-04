@@ -22,6 +22,7 @@
 #include "config.h"
 #include "cint.h"
 #include "gto/gto.h"
+#include "np_helper/np_helper.h"
 
 /*
  * out[naoi,naoj,naok,comp] in F-order
@@ -190,8 +191,12 @@ void GTOr3c_drv(int (*intor)(), void (*fill)(), double complex *eri, int comp,
                                                  atm, natm, bas, nbas, env);
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ish, jsh, ij;
-        double complex *buf = malloc(sizeof(double complex) *
+        double complex *buf = pyscf_malloc(sizeof(double complex) *
                                      (di*di*di*comp + cache_size/2));
 #pragma omp for schedule(dynamic)
         for (ij = 0; ij < nish*njsh; ij++) {
@@ -200,6 +205,10 @@ void GTOr3c_drv(int (*intor)(), void (*fill)(), double complex *eri, int comp,
                 (*fill)(intor, eri, buf, comp, ish, jsh, shls_slice, ao_loc,
                         cintopt, atm, natm, bas, nbas, env);
         }
-        free(buf);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }

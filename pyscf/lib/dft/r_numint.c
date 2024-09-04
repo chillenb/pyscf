@@ -80,6 +80,10 @@ void VXCzdot_ao_dm(double complex *vm, double complex *ao, double complex *dm,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ip, ib;
 #pragma omp for nowait schedule(static)
         for (ib = 0; ib < nblk; ib++) {
@@ -88,6 +92,10 @@ void VXCzdot_ao_dm(double complex *vm, double complex *ao, double complex *dm,
                           nao, nocc, ngrids, MIN(ngrids-ip, BLKSIZE),
                           non0table+ib*nbas, shls_slice, ao_loc);
         }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -144,8 +152,12 @@ void VXCzdot_ao_ao(double complex *vv, double complex *ao1, double complex *ao2,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ip, ib;
-        double complex *v_priv = calloc(nao*nao+2, sizeof(double complex));
+        double complex *v_priv = pyscf_calloc(nao*nao+2, sizeof(double complex));
 #pragma omp for nowait schedule(static)
         for (ib = 0; ib < nblk; ib++) {
                 ip = ib * BLKSIZE;
@@ -159,7 +171,11 @@ void VXCzdot_ao_ao(double complex *vv, double complex *ao1, double complex *ao2,
                         vv[ip] += conj(v_priv[ip]);
                 }
         }
-        free(v_priv);
+        pyscf_free(v_priv);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
         if (hermi != 0) {
                 NPzhermi_triu(nao, vv, hermi);

@@ -286,17 +286,17 @@ void CCuccsd_t_aaa(double complex *e_tot,
 {
         int da = a1 - a0;
         int db = b1 - b0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*b1);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*b1);
         size_t njobs = _ccsd_t_gen_jobs(jobs, nocc, nvir, a0, a1, b0, b1,
                                         cache_row_a, cache_col_a,
                                         cache_row_b, cache_col_b, sizeof(double));
-        double *fvohalf = malloc(sizeof(double) * nvir*nocc);
+        double *fvohalf = pyscf_malloc(sizeof(double) * nvir*nocc);
         int i;
         for (i = 0; i < nvir*nocc; i++) {
                 fvohalf[i] = fvo[i] * .5;
         }
 
-        int *permute_idx = malloc(sizeof(int) * nocc*nocc*nocc * 6);
+        int *permute_idx = pyscf_malloc(sizeof(int) * nocc*nocc*nocc * 6);
         _make_permute_indices(permute_idx, nocc);
 
 #pragma omp parallel default(none) \
@@ -304,11 +304,15 @@ void CCuccsd_t_aaa(double complex *e_tot,
                v_ir_loc, oo_ir_loc, orbsym, vooo, fvohalf, jobs, e_tot, \
                permute_idx, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        double *cache1 = malloc(sizeof(double) * (nocc*nocc*nocc*3+2));
+        double *cache1 = pyscf_malloc(sizeof(double) * (nocc*nocc*nocc*3+2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in CCuccsd_t_aaa\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in CCuccsd_t_aaa\n",
                         sizeof(double) * nocc*nocc*nocc*3);
                 exit(1);
         }
@@ -323,13 +327,17 @@ void CCuccsd_t_aaa(double complex *e_tot,
                                    fvohalf, vooo, cache1, jobs[k].cache,
                                    permute_idx);
         }
-        free(cache1);
+        pyscf_free(cache1);
 #pragma omp critical
         *e_tot += e;
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(permute_idx);
-        free(fvohalf);
-        free(jobs);
+        pyscf_free(permute_idx);
+        pyscf_free(fvohalf);
+        pyscf_free(jobs);
 }
 
 
@@ -541,7 +549,7 @@ void CCuccsd_t_baa(double complex *e_tot,
 {
         int da = a1 - a0;
         int db = b1 - b0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*b1);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*b1);
         size_t njobs = gen_baa_jobs(jobs, nocca, noccb, nvira, nvirb,
                                     a0, a1, b0, b1,
                                     cache_row_a, cache_col_a,
@@ -552,12 +560,16 @@ void CCuccsd_t_baa(double complex *e_tot,
 #pragma omp parallel default(none) \
         shared(njobs, nocca, noccb, nvira, nvirb, vs_ts, jobs, e_tot, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        double *cache1 = malloc(sizeof(double) * (noccb*nocca*nocca*5+1 +
+        double *cache1 = pyscf_malloc(sizeof(double) * (noccb*nocca*nocca*5+1 +
                                                   nocca*2+noccb*2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in CCuccsd_t_baa\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in CCuccsd_t_baa\n",
                         sizeof(double) * noccb*nocca*nocca*5);
                 exit(1);
         }
@@ -570,11 +582,15 @@ void CCuccsd_t_baa(double complex *e_tot,
                 e += contract6_baa(nocca, noccb, nvira, nvirb, a, b, c, vs_ts,
                                    jobs[k].cache, cache1);
         }
-        free(cache1);
+        pyscf_free(cache1);
 #pragma omp critical
         *e_tot += e;
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(jobs);
+        pyscf_free(jobs);
 }
 
 
@@ -691,18 +707,18 @@ void CCuccsd_t_zaaa(double complex *e_tot,
 {
         int da = a1 - a0;
         int db = b1 - b0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*b1);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*b1);
         size_t njobs = _ccsd_t_gen_jobs(jobs, nocc, nvir, a0, a1, b0, b1,
                                         cache_row_a, cache_col_a,
                                         cache_row_b, cache_col_b,
                                         sizeof(double complex));
-        double complex *fvohalf = malloc(sizeof(double complex) * nvir*nocc);
+        double complex *fvohalf = pyscf_malloc(sizeof(double complex) * nvir*nocc);
         int i;
         for (i = 0; i < nvir*nocc; i++) {
                 fvohalf[i] = fvo[i] * .5;
         }
 
-        int *permute_idx = malloc(sizeof(int) * nocc*nocc*nocc * 6);
+        int *permute_idx = pyscf_malloc(sizeof(int) * nocc*nocc*nocc * 6);
         _make_permute_indices(permute_idx, nocc);
 
 #pragma omp parallel default(none) \
@@ -710,12 +726,16 @@ void CCuccsd_t_zaaa(double complex *e_tot,
                v_ir_loc, oo_ir_loc, orbsym, vooo, fvohalf, jobs, e_tot, \
                permute_idx, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        double complex *cache1 = malloc(sizeof(double complex) *
+        double complex *cache1 = pyscf_malloc(sizeof(double complex) *
                                         (nocc*nocc*nocc*3+2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in CCuccsd_t_zaaa\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in CCuccsd_t_zaaa\n",
                         sizeof(double complex) * nocc*nocc*nocc*3);
                 exit(1);
         }
@@ -730,13 +750,17 @@ void CCuccsd_t_zaaa(double complex *e_tot,
                                     fvohalf, vooo, cache1, jobs[k].cache,
                                     permute_idx);
         }
-        free(cache1);
+        pyscf_free(cache1);
 #pragma omp critical
         *e_tot += e;
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(permute_idx);
-        free(fvohalf);
-        free(jobs);
+        pyscf_free(permute_idx);
+        pyscf_free(fvohalf);
+        pyscf_free(jobs);
 }
 
 
@@ -905,7 +929,7 @@ void CCuccsd_t_zbaa(double complex *e_tot,
 {
         int da = a1 - a0;
         int db = b1 - b0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*b1);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*b1);
         size_t njobs = gen_baa_jobs(jobs, nocca, noccb, nvira, nvirb,
                                     a0, a1, b0, b1,
                                     cache_row_a, cache_col_a,
@@ -918,13 +942,17 @@ void CCuccsd_t_zbaa(double complex *e_tot,
 #pragma omp parallel default(none) \
         shared(njobs, nocca, noccb, nvira, nvirb, vs_ts, jobs, e_tot, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        double complex *cache1 = malloc(sizeof(double complex) *
+        double complex *cache1 = pyscf_malloc(sizeof(double complex) *
                                         (noccb*nocca*nocca*5+1 +
                                          nocca*2+noccb*2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in CCuccsd_t_zbaa\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in CCuccsd_t_zbaa\n",
                         sizeof(double complex) * noccb*nocca*nocca*5);
                 exit(1);
         }
@@ -937,10 +965,14 @@ void CCuccsd_t_zbaa(double complex *e_tot,
                 e += zcontract6_baa(nocca, noccb, nvira, nvirb, a, b, c, vs_ts,
                                    jobs[k].cache, cache1);
         }
-        free(cache1);
+        pyscf_free(cache1);
 #pragma omp critical
         *e_tot += e;
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(jobs);
+        pyscf_free(jobs);
 }
 

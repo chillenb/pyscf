@@ -127,7 +127,7 @@ int RIhalfmmm_r_s2_ket(double complex *vout, double complex *vin,
         int j_start = envs->ket_start;
         int j_count = envs->ket_count;
         double complex *mo_coeff = envs->mo_coeff;
-        double complex *buf = malloc(sizeof(double complex)*n2c*j_count);
+        double complex *buf = pyscf_malloc(sizeof(double complex)*n2c*j_count);
         int i, j;
 
         zhemm_(&SIDE_L, &UPLO_U, &n2c, &j_count,
@@ -139,7 +139,7 @@ int RIhalfmmm_r_s2_ket(double complex *vout, double complex *vin,
                 }
                 vout += j_count;
         }
-        free(buf);
+        pyscf_free(buf);
         return 0;
 }
 
@@ -210,9 +210,9 @@ void RItranse2_r_s2(int (*fmmm)(),
         int nao = envs->nao;
         size_t ij_pair = (*fmmm)(NULL, NULL, envs, 1);
         size_t nao2 = nao*(nao+1)/2;
-        double complex *buf = malloc(sizeof(double complex) * nao*nao);
+        double complex *buf = pyscf_malloc(sizeof(double complex) * nao*nao);
         NPzunpack_tril(nao, vin+nao2*row_id, buf, 0);
         (*fmmm)(vout+ij_pair*row_id, buf, envs, 0);
-        free(buf);
+        pyscf_free(buf);
 }
 

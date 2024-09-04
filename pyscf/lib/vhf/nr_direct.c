@@ -232,7 +232,7 @@ void CVHFdot_nrs8(int (*intor)(), JKOperator **jkop, JKArray **vjk,
 JKArray *CVHFallocate_JKArray(JKOperator *op, int *shls_slice, int *ao_loc,
                               int ncomp, int nblock, int size_limit)
 {
-        JKArray *jkarray = malloc(sizeof(JKArray));
+        JKArray *jkarray = pyscf_malloc(sizeof(JKArray));
         int ibra = op->ibra_shl0;
         int iket = op->iket_shl0;
         int obra = op->obra_shl0;
@@ -244,27 +244,27 @@ JKArray *CVHFallocate_JKArray(JKOperator *op, int *shls_slice, int *ao_loc,
         jkarray->dm_dims[1] = ao_loc[shls_slice[iket+1]] - ao_loc[shls_slice[iket]];
         jkarray->offset0_outptr = v_bra_sh0 * jkarray->v_ket_nsh + v_ket_sh0;
         jkarray->nblock = nblock;
-        int *outptr = malloc(sizeof(int) * nblock * nblock);
+        int *outptr = pyscf_malloc(sizeof(int) * nblock * nblock);
         jkarray->outptr = outptr;
         int i;
         for (i = 0; i < nblock * nblock; i++) {
                 outptr[i] = NOVALUE;
         }
         jkarray->stack_size = 0;
-        jkarray->data = malloc(sizeof(double) * (size_limit + 136*136));
+        jkarray->data = pyscf_malloc(sizeof(double) * (size_limit + 136*136));
         jkarray->ncomp = ncomp;
         int keys_max = size_limit / (AO_BLOCK_SIZE*AO_BLOCK_SIZE*ncomp);
-        jkarray->keys_cache = malloc(sizeof(int) * keys_max);
+        jkarray->keys_cache = pyscf_malloc(sizeof(int) * keys_max);
         jkarray->key_counts = 0;
         return jkarray;
 }
 
 void CVHFdeallocate_JKArray(JKArray *jkarray)
 {
-        free(jkarray->outptr);
-        free(jkarray->data);
-        free(jkarray->keys_cache);
-        free(jkarray);
+        pyscf_free(jkarray->outptr);
+        pyscf_free(jkarray->data);
+        pyscf_free(jkarray->keys_cache);
+        pyscf_free(jkarray);
 }
 
 double *CVHFallocate_and_reorder_dm(JKOperator *op, double *dm,
@@ -280,7 +280,7 @@ double *CVHFallocate_and_reorder_dm(JKOperator *op, double *dm,
         int joff = ao_loc[jsh0];
         int nrow = ao_loc[ish1] - ioff;
         int ncol = ao_loc[jsh1] - joff;
-        double *out = malloc(sizeof(double) * nrow*ncol);
+        double *out = pyscf_malloc(sizeof(double) * nrow*ncol);
         int ish, jsh, i0, i1, j0, j1, i, j, ij;
 
         ij = 0;
@@ -383,7 +383,7 @@ void CVHFnr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
         int njsh = jsh1 - jsh0;
         int nksh = ksh1 - ksh0;
         int nlsh = lsh1 - lsh0;
-        int *block_iloc = malloc(sizeof(int) * (nish + njsh + nksh + nlsh + 4));
+        int *block_iloc = pyscf_malloc(sizeof(int) * (nish + njsh + nksh + nlsh + 4));
         int *block_jloc = block_iloc + nish + 1;
         int *block_kloc = block_jloc + njsh + 1;
         int *block_lloc = block_kloc + nksh + 1;
@@ -401,6 +401,10 @@ void CVHFnr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ioff = ao_loc[ish0];
         int joff = ao_loc[jsh0];
         int koff = ao_loc[ksh0];
@@ -411,7 +415,7 @@ void CVHFnr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
                 v_priv[i] = CVHFallocate_JKArray(jkop[i], shls_slice, ao_loc,
                                                  ncomp, nblock_max, size_limit);
         }
-        double *buf = malloc(sizeof(double) * (di*di*di*di*ncomp + di*di*2 + cache_size));
+        double *buf = pyscf_malloc(sizeof(double) * (di*di*di*di*ncomp + di*di*2 + cache_size));
         double *cache = buf + di*di*di*di*ncomp;
 #pragma omp for nowait schedule(dynamic, 1)
         for (blk_id = 0; blk_id < nblock_jkl; blk_id++) {
@@ -467,12 +471,16 @@ void CVHFnr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
                 }
                 CVHFdeallocate_JKArray(v_priv[n]);
         }
-        free(buf);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
         for (idm = 0; idm < n_dm; idm++) {
-                free(tile_dms[idm]);
+                pyscf_free(tile_dms[idm]);
         }
-        free(block_iloc);
+        pyscf_free(block_iloc);
 }
 
 // Divide shells into subblocks with two cutting points specified in shls_lim.
@@ -532,7 +540,7 @@ void CVHFnr_direct_ex_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
         int nksh = ksh1 - ksh0;
         int nlsh = lsh1 - lsh0;
         int *shls_excludes = shls_slice + 8;
-        int *block_iloc = malloc(sizeof(int) * (nish + njsh + nksh + nlsh + 4));
+        int *block_iloc = pyscf_malloc(sizeof(int) * (nish + njsh + nksh + nlsh + 4));
         int *block_jloc = block_iloc + nish + 1;
         int *block_kloc = block_jloc + njsh + 1;
         int *block_lloc = block_kloc + nksh + 1;
@@ -550,6 +558,10 @@ void CVHFnr_direct_ex_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ioff = ao_loc[ish0];
         int joff = ao_loc[jsh0];
         int koff = ao_loc[ksh0];
@@ -560,7 +572,7 @@ void CVHFnr_direct_ex_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
                 v_priv[i] = CVHFallocate_JKArray(jkop[i], shls_slice, ao_loc,
                                                  ncomp, nblock_max, size_limit);
         }
-        double *buf = malloc(sizeof(double) * (di*di*di*di*ncomp + di*di*2 + cache_size));
+        double *buf = pyscf_malloc(sizeof(double) * (di*di*di*di*ncomp + di*di*2 + cache_size));
         double *cache = buf + di*di*di*di*ncomp;
 #pragma omp for nowait schedule(dynamic, 1)
         for (blk_id = 0; blk_id < nblock_jkl; blk_id++) {
@@ -623,10 +635,14 @@ void CVHFnr_direct_ex_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
                 }
                 CVHFdeallocate_JKArray(v_priv[n]);
         }
-        free(buf);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
         for (idm = 0; idm < n_dm; idm++) {
-                free(tile_dms[idm]);
+                pyscf_free(tile_dms[idm]);
         }
-        free(block_iloc);
+        pyscf_free(block_iloc);
 }

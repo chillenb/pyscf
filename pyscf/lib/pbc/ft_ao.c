@@ -663,7 +663,7 @@ void PBC_ft_bvk_drv(FPtrIntor intor, FPtr_eval_gz eval_gz, FPtrFill fill, FPtrSo
         PBCminimal_CINTEnvVars(&envs_cint, atm, natm, bas, nbas, env, NULL);
         int ish, jsh, ij;
         int cell0_shls[2];
-        double *buf = malloc(sizeof(double) * (buf_size+cache_size));
+        double *buf = pyscf_malloc(sizeof(double) * (buf_size+cache_size));
 #pragma omp for schedule(dynamic)
         for (ij = 0; ij < nish*njsh; ij++) {
                 ish = ij / njsh + ish0;
@@ -677,7 +677,7 @@ void PBC_ft_bvk_drv(FPtrIntor intor, FPtr_eval_gz eval_gz, FPtrFill fill, FPtrSo
                 (*fill)(intor, eval_gz, fsort, out, buf, cell0_shls,
                         &envs_cint, &envs_bvk);
         }
-        free(buf);
+        pyscf_free(buf);
 }
 }
 
@@ -790,8 +790,8 @@ void PBCsupmol_ovlp_mask(int8_t *out, double cutoff,
 {
         size_t Nbas = nbas;
         size_t Nbas1 = nbas + 1;
-        int *exps_group_loc = malloc(sizeof(int) * Nbas1);
-        double *exps = malloc(sizeof(double) * Nbas1 * 4);
+        int *exps_group_loc = pyscf_malloc(sizeof(int) * Nbas1);
+        double *exps = pyscf_malloc(sizeof(double) * Nbas1 * 4);
         double *rx = exps + Nbas1;
         double *ry = rx + Nbas1;
         double *rz = ry + Nbas1;
@@ -881,6 +881,6 @@ void PBCsupmol_ovlp_mask(int8_t *out, double cutoff,
                 }
         }
 }
-        free(exps);
-        free(exps_group_loc);
+        pyscf_free(exps);
+        pyscf_free(exps_group_loc);
 }

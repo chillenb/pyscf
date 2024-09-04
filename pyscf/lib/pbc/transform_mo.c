@@ -29,6 +29,10 @@
 #include "vhf/fblas.h"
 #include "pbc/pbc.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define SQRTHALF        0.707106781186547524
 
 // # Transform AO indices
@@ -49,6 +53,9 @@ void PBCmo_k2gamma(double *dmfR, double *dmfI,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int ip0, ip1, i0, di, i, j, n, k, kc;
         int ish_bvk, ish, ish0, ish1, ishp, iL;
         double complex phase, phasec, v1, v2, c1, c2;
@@ -104,6 +111,9 @@ for (n = 0; n < ngroups; n++) {
                         }
                 }
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -193,13 +203,13 @@ void PBC_kcontract_fake_gamma(double *vkR, double *vkI, double *moR,
 {
         size_t nao2 = nao * nao;
         size_t size_vk = nkpts * nao2;
-        double *v00R = calloc(sizeof(double), size_vk*4);
+        double *v00R = pyscf_calloc(sizeof(double), size_vk*4);
         double *v00I = v00R + size_vk;
         double *v01R = v00I + size_vk;
         double *v01I = v01R + size_vk;
         int *k_list = k_conj_groups;
         int *kc_list = k_conj_groups + ngroups;
-        int *ki2kj = malloc(sizeof(int) * nkpts * 2);
+        int *ki2kj = pyscf_malloc(sizeof(int) * nkpts * 2);
         int *kj2ki = ki2kj + nkpts;
         int n;
 #pragma GCC ivdep
@@ -212,7 +222,7 @@ void PBC_kcontract_fake_gamma(double *vkR, double *vkI, double *moR,
         int nmog = nmo * ngrids;
         int knmo = nkpts * nmo;
         size_t Naog = naog;
-        double *GpiR = malloc(sizeof(double) * Naog * knmo * 2);
+        double *GpiR = pyscf_malloc(sizeof(double) * Naog * knmo * 2);
         double *GpiI = GpiR + naog * knmo;
 
         char TRANS_T = 'T';
@@ -223,6 +233,9 @@ void PBC_kcontract_fake_gamma(double *vkR, double *vkI, double *moR,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         size_t k0, k1;
         NPomp_split(&k0, &k1, knmo);
         int dk = k1 - k0;
@@ -232,7 +245,7 @@ void PBC_kcontract_fake_gamma(double *vkR, double *vkI, double *moR,
         dgemm_(&TRANS_N, &TRANS_T, &naog, &dk, &s_nao, &D1, GpqI, &naog, moR+k0, &knmo, &D0, pI, &naog);
 #pragma omp barrier
 
-        double *buf0R = malloc(sizeof(double) * Naog * nmo * 6);
+        double *buf0R = pyscf_malloc(sizeof(double) * Naog * nmo * 6);
         double *buf0I = buf0R + Naog * nmo;
         double *buf1R = buf0I + Naog * nmo;
         double *buf1I = buf1R + Naog * nmo;
@@ -301,7 +314,7 @@ dgemm_(&TRANS_T, &TRANS_N, &nao, &nao, &nmog, &N1, bufwI, &nmog, buf0R, &nmog, &
 // Put v10[k] in v01[kc]
 hermi_assign(v01R+kc*nao2, v01I+kc*nao2, v01R+k*nao2, v01I+k*nao2, nao);
         }
-        free(buf0R);
+        pyscf_free(buf0R);
 #pragma omp barrier
 
         // k as kj
@@ -356,8 +369,11 @@ if (k == kc) {
 }
                 }
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(GpiR);
-        free(v00R);
-        free(ki2kj);
+        pyscf_free(GpiR);
+        pyscf_free(v00R);
+        pyscf_free(ki2kj);
 }

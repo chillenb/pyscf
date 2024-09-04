@@ -18,6 +18,10 @@
 
 #include <complex.h>
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define BLOCK_DIM    104
 
 #define HERMITIAN    1
@@ -68,3 +72,7 @@ void NPdgemm(const char trans_a, const char trans_b,
              const int offseta, const int offsetb, const int offsetc,
              double *a, double *b, double *c,
              const double alpha, const double beta);
+
+void *pyscf_malloc(size_t alloc_size);
+void *pyscf_calloc(size_t n, size_t size);
+void pyscf_free(void *ptr);

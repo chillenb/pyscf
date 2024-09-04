@@ -21,6 +21,8 @@
 #include "config.h"
 #include "vhf/fblas.h"
 #include "ao2mo/nr_ao2mo.h"
+#include "np_helper/np_helper.h"
+
 #define OUTPUTIJ        1
 #define INPUT_IJ        2
 
@@ -83,8 +85,8 @@ void CCvhfs2kl(double *eri, double *dm, double *vj, double *vk, int ni, int nj)
 
 #pragma omp parallel private(ij, i, j, off)
         {
-                double *vj_priv = malloc(sizeof(double)*ni*nj);
-                double *vk_priv = malloc(sizeof(double)*ni*nj);
+                double *vj_priv = pyscf_malloc(sizeof(double)*ni*nj);
+                double *vk_priv = pyscf_malloc(sizeof(double)*ni*nj);
                 for (i = 0; i < ni * nj; i++) {
                         vj_priv[i] = 0;
                         vk_priv[i] = 0;
@@ -104,8 +106,8 @@ void CCvhfs2kl(double *eri, double *dm, double *vj, double *vk, int ni, int nj)
                                 vk[i] += vk_priv[i];
                         }
                 }
-                free(vj_priv);
-                free(vk_priv);
+                pyscf_free(vj_priv);
+                pyscf_free(vk_priv);
         }
 }
 

@@ -627,11 +627,15 @@ void CVHFnrs8_incore_drv(double *eri, double **dms, double **vjk,
 #pragma omp parallel default(none) \
         shared(eri, dms, vjk, n_dm, nao, fjk)
         {
+#ifdef PYSCF_USE_MKL
+                int save = mkl_set_num_threads_local(1);
+#endif
+
                 int i, j, ic;
                 size_t ij, off;
                 size_t npair = nao*(nao+1)/2;
                 size_t nn = nao * nao;
-                double *v_priv = calloc(nn*n_dm, sizeof(double));
+                double *v_priv = pyscf_calloc(nn*n_dm, sizeof(double));
                 FjkPtr pf;
                 double *pv;
 #pragma omp for nowait schedule(dynamic, 4)
@@ -654,7 +658,11 @@ void CVHFnrs8_incore_drv(double *eri, double **dms, double **vjk,
                                 }
                         }
                 }
-                free(v_priv);
+                pyscf_free(v_priv);
+
+#ifdef PYSCF_USE_MKL
+                mkl_set_num_threads_local(save);
+#endif
         }
 }
 
@@ -664,11 +672,15 @@ void CVHFnrs4_incore_drv(double *eri, double **dms, double **vjk,
 #pragma omp parallel default(none) \
         shared(eri, dms, vjk, n_dm, nao, fjk)
         {
+#ifdef PYSCF_USE_MKL
+                int save = mkl_set_num_threads_local(1);
+#endif
+
                 int i, j, ic;
                 size_t ij, off;
                 size_t npair = nao*(nao+1)/2;
                 size_t nn = nao * nao;
-                double *v_priv = calloc(nn*n_dm, sizeof(double));
+                double *v_priv = pyscf_calloc(nn*n_dm, sizeof(double));
                 FjkPtr pf;
                 double *pv;
 #pragma omp for nowait schedule(dynamic, 4)
@@ -691,7 +703,11 @@ void CVHFnrs4_incore_drv(double *eri, double **dms, double **vjk,
                                 }
                         }
                 }
-                free(v_priv);
+                pyscf_free(v_priv);
+
+#ifdef PYSCF_USE_MKL
+                mkl_set_num_threads_local(save);
+#endif
         }
 }
 
@@ -701,11 +717,15 @@ void CVHFnrs2ij_incore_drv(double *eri, double **dms, double **vjk,
 #pragma omp parallel default(none) \
         shared(eri, dms, vjk, n_dm, nao, fjk)
         {
+#ifdef PYSCF_USE_MKL
+                int save = mkl_set_num_threads_local(1);
+#endif
+
                 int i, j, ic;
                 size_t ij, off;
                 size_t npair = nao*(nao+1)/2;
                 size_t nn = nao * nao;
-                double *v_priv = calloc(nn*n_dm, sizeof(double));
+                double *v_priv = pyscf_calloc(nn*n_dm, sizeof(double));
                 FjkPtr pf;
                 double *pv;
 #pragma omp for nowait schedule(dynamic, 4)
@@ -728,7 +748,11 @@ void CVHFnrs2ij_incore_drv(double *eri, double **dms, double **vjk,
                                 }
                         }
                 }
-                free(v_priv);
+                pyscf_free(v_priv);
+
+#ifdef PYSCF_USE_MKL
+                mkl_set_num_threads_local(save);
+#endif
         }
 }
 
@@ -738,11 +762,15 @@ void CVHFnrs2kl_incore_drv(double *eri, double **dms, double **vjk,
 #pragma omp parallel default(none) \
         shared(eri, dms, vjk, n_dm, nao, fjk)
         {
+#ifdef PYSCF_USE_MKL
+                int save = mkl_set_num_threads_local(1);
+#endif
+
                 int i, j, ic;
                 size_t ij, off;
                 size_t npair = nao*(nao+1)/2;
                 size_t nn = nao * nao;
-                double *v_priv = calloc(nn*n_dm, sizeof(double));
+                double *v_priv = pyscf_calloc(nn*n_dm, sizeof(double));
                 FjkPtr pf;
                 double *pv;
 #pragma omp for nowait schedule(dynamic, 4)
@@ -765,7 +793,11 @@ void CVHFnrs2kl_incore_drv(double *eri, double **dms, double **vjk,
                                 }
                         }
                 }
-                free(v_priv);
+                pyscf_free(v_priv);
+
+#ifdef PYSCF_USE_MKL
+                mkl_set_num_threads_local(save);
+#endif
         }
 }
 
@@ -775,10 +807,14 @@ void CVHFnrs1_incore_drv(double *eri, double **dms, double **vjk,
 #pragma omp parallel default(none) \
         shared(eri, dms, vjk, n_dm, nao, fjk)
         {
+#ifdef PYSCF_USE_MKL
+                int save = mkl_set_num_threads_local(1);
+#endif
+
                 int i, j, ic;
                 size_t ij, off;
                 size_t nn = nao * nao;
-                double *v_priv = calloc(nn*n_dm, sizeof(double));
+                double *v_priv = pyscf_calloc(nn*n_dm, sizeof(double));
                 FjkPtr pf;
                 double *pv;
 #pragma omp for nowait schedule(dynamic, 4)
@@ -801,6 +837,10 @@ void CVHFnrs1_incore_drv(double *eri, double **dms, double **vjk,
                                 }
                         }
                 }
-                free(v_priv);
+                pyscf_free(v_priv);
+
+#ifdef PYSCF_USE_MKL
+                mkl_set_num_threads_local(save);
+#endif
         }
 }

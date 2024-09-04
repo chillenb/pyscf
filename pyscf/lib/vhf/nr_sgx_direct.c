@@ -26,6 +26,7 @@
 #include "cint.h"
 #include "nr_direct.h"
 #include "gto/gto.h"
+#include "np_helper/np_helper.h"
 
 #define MAX(I,J)        ((I) > (J) ? (I) : (J))
 #define MIN(I,J)        ((I) < (J) ? (I) : (J))
@@ -127,7 +128,7 @@ void SGXdot_nrk(int (*intor)(), SGXJKOperator **jkop, SGXJKArray **vjk,
 
         int tmp_ngrids = 0;
         int k;
-        int* inds = (int*) malloc(tot_grids*sizeof(int));
+        int* inds = (int*) pyscf_malloc(tot_grids*sizeof(int));
 
         double *grids = env + (size_t) env[PTR_GRIDS];
         
@@ -170,7 +171,7 @@ void SGXdot_nrk(int (*intor)(), SGXJKOperator **jkop, SGXJKArray **vjk,
                                     i0, i1, j0, j1, inds, tmp_ngrids);
         }
         
-        free(inds);
+        pyscf_free(inds);
 }
 
 
@@ -213,9 +214,13 @@ void SGXnr_direct_drv(int (*intor)(), void (*fdot)(), SGXJKOperator **jkop,
                aosym, npair, cintopt, env_size, \
                ngrids, all_grids)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int i, ij, ish, jsh;
         int shls[4];
-        double* tmp_env = (double*) malloc(env_size * sizeof(double));
+        double* tmp_env = (double*) pyscf_malloc(env_size * sizeof(double));
         for (i = 0; i < env_size; i++) {
             tmp_env[i] = env[i];
         }
@@ -225,8 +230,8 @@ void SGXnr_direct_drv(int (*intor)(), void (*fdot)(), SGXJKOperator **jkop,
         for (i = 0; i < n_dm; i++) {
                 v_priv[i] = jkop[i]->allocate(shls_slice, ao_loc, ncomp, ngrids);
         }
-        double *buf = malloc(sizeof(double) * ngrids*di*di*ncomp);
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *buf = pyscf_malloc(sizeof(double) * ngrids*di*di*ncomp);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
 #pragma omp for nowait schedule(dynamic, 1)
         for (ij = 0; ij < npair; ij++) {
                 if (aosym == 2) {
@@ -250,9 +255,13 @@ void SGXnr_direct_drv(int (*intor)(), void (*fdot)(), SGXJKOperator **jkop,
                 jkop[i]->finalize(v_priv[i], vjk[i]);
         }
 }
-        free(buf);
-        free(cache);
-        free(tmp_env);
+        pyscf_free(buf);
+        pyscf_free(cache);
+        pyscf_free(tmp_env);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -266,6 +275,10 @@ void SGXnr_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
 #pragma omp parallel default(none) \
         shared(intor, q_cond, ao_loc, atm, natm, bas, nbas, env, cache_size)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         double qtmp, tmp;
         int ij, i, j, di, dj, ish, jsh;
         int shls[2];
@@ -274,7 +287,7 @@ void SGXnr_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
                 dj = ao_loc[ish+1] - ao_loc[ish];
                 di = MAX(di, dj);
         }
-        double *cache = malloc(sizeof(double) * (di*di + cache_size));
+        double *cache = pyscf_malloc(sizeof(double) * (di*di + cache_size));
         double *buf = cache + cache_size;
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < nbas*(nbas+1)/2; ij++) {
@@ -306,7 +319,11 @@ void SGXnr_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
                 q_cond[ish*nbas+jsh] = qtmp;
                 q_cond[jsh*nbas+ish] = qtmp;
         }
-        free(cache);
+        pyscf_free(cache);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -315,10 +332,10 @@ void SGXsetnr_direct_scf(CVHFOpt *opt, int (*intor)(), CINTOpt *cintopt,
                          int *bas, int nbas, double *env)
 {
         if (opt->q_cond != NULL) {
-                free(opt->q_cond);
+                pyscf_free(opt->q_cond);
         }
         nbas = opt->nbas;
-        double *q_cond = (double *)malloc(sizeof(double) * nbas*nbas);
+        double *q_cond = (double *)pyscf_malloc(sizeof(double) * nbas*nbas);
         opt->q_cond = q_cond;
         SGXnr_q_cond(intor, cintopt, q_cond, ao_loc, atm, natm, bas, nbas, env);
 }
@@ -350,11 +367,11 @@ void SGXsetnr_direct_scf_dm(CVHFOpt *opt, double *dm, int nset, int *ao_loc,
 {
         nbas = opt->nbas;
         if (opt->dm_cond != NULL) {
-                free(opt->dm_cond);
+                pyscf_free(opt->dm_cond);
         }
-        opt->dm_cond = (double *)malloc(sizeof(double) * nbas*ngrids);
+        opt->dm_cond = (double *)pyscf_malloc(sizeof(double) * nbas*ngrids);
         if (opt->dm_cond == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in SGXsetnr_direct_scf_dm\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in SGXsetnr_direct_scf_dm\n",
                         sizeof(double) * nbas*ngrids);
                 exit(1);
         }
@@ -391,17 +408,17 @@ int SGXnr_ovlp_prescreen(int *shls, CVHFOpt *opt,
 static SGXJKArray *SGXJKOperator_allocate_##label(int *shls_slice, int *ao_loc, \
                                                   int ncomp, int ngrids) \
 { \
-        SGXJKArray *jkarray = malloc(sizeof(SGXJKArray)); \
+        SGXJKArray *jkarray = pyscf_malloc(sizeof(SGXJKArray)); \
         jkarray->v_dims[0]  = ao_loc[shls_slice[1]] - ao_loc[shls_slice[0]]; \
         jkarray->v_dims[1]  = ao_loc[shls_slice[3]] - ao_loc[shls_slice[2]]; \
         jkarray->v_dims[2]  = ngrids; \
         if (task == JTYPE1) { \
-                jkarray->data = calloc(ncomp * jkarray->v_dims[2], sizeof(double)); \
+                jkarray->data = pyscf_calloc(ncomp * jkarray->v_dims[2], sizeof(double)); \
         } else if (task == JTYPE2) { \
-                jkarray->data = calloc(ncomp * jkarray->v_dims[0] \
+                jkarray->data = pyscf_calloc(ncomp * jkarray->v_dims[0] \
                                        * jkarray->v_dims[1], sizeof(double)); \
         } else { \
-                jkarray->data = calloc(ncomp * jkarray->v_dims[0] \
+                jkarray->data = pyscf_calloc(ncomp * jkarray->v_dims[0] \
                                        * jkarray->v_dims[2], sizeof(double)); \
         } \
         jkarray->ncomp = ncomp; \
@@ -448,8 +465,8 @@ SGXJKOperator SGX##fname = {SGXJKOperator_allocate_##fname, fname, \
 
 static void SGXJKOperator_deallocate(SGXJKArray *jkarray)
 {
-        free(jkarray->data);
-        free(jkarray);
+        pyscf_free(jkarray->data);
+        pyscf_free(jkarray);
 }
 
 static void SGXJKOperator_sanity_check_s1(int *shls_slice)

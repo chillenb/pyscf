@@ -57,7 +57,7 @@ void contract_vhf_dm(double* out, double* vhf, double* dm,
     if (thread_id == 0) {
         buf = out;
     } else {
-        buf = calloc(comp*natm, sizeof(double));
+        buf = pyscf_calloc(comp*natm, sizeof(double));
     }
     out_bufs[thread_id] = buf;
 
@@ -89,7 +89,7 @@ void contract_vhf_dm(double* out, double* vhf, double* dm,
 
     NPomp_dsum_reduce_inplace(out_bufs, comp*natm);
     if (thread_id != 0) {
-        free(buf);
+        pyscf_free(buf);
     }
 }
 }

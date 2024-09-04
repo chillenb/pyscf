@@ -23,6 +23,8 @@
 #include "cint.h"
 #include "gto/gto.h"
 
+#include "np_helper/np_helper.h"
+
 /*
  * out[naoi,naoj,naok,comp] in F-order
  */
@@ -85,10 +87,14 @@ void GTOr4c_drv(int (*intor)(), void (*fill)(), int (*prescreen)(),
                                                  atm, natm, bas, nbas, env);
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ish, jsh, ij;
-        double *buf = malloc(sizeof(double) * cache_size);
+        double *buf = pyscf_malloc(sizeof(double) * cache_size);
         if (buf == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in GTOr4c_drv\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in GTOr4c_drv\n",
                         sizeof(double) * cache_size);
                 exit(1);
         }
@@ -99,6 +105,10 @@ void GTOr4c_drv(int (*intor)(), void (*fill)(), int (*prescreen)(),
                 (*fill)(intor, eri, buf, comp, ish, jsh, shls_slice, ao_loc,
                         cintopt, atm, natm, bas, nbas, env);
         }
-        free(buf);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }

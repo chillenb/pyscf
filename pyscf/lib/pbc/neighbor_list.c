@@ -21,17 +21,18 @@
 #include "config.h"
 #include "cint.h"
 #include "pbc/neighbor_list.h"
+#include "np_helper/np_helper.h"
 
 #define SQUARE(r)       (r[0]*r[0]+r[1]*r[1]+r[2]*r[2])
 
 void init_neighbor_pair(NeighborPair** np, int nimgs, int* Ls_list)
 {
-    NeighborPair *np0 = (NeighborPair*) malloc(sizeof(NeighborPair));
+    NeighborPair *np0 = (NeighborPair*) pyscf_malloc(sizeof(NeighborPair));
     np0->nimgs = nimgs;
     np0->q_cond = NULL;
     np0->center = NULL;
     if (nimgs > 0){
-        np0->Ls_list = (int*) malloc(sizeof(int)*nimgs);
+        np0->Ls_list = (int*) pyscf_malloc(sizeof(int)*nimgs);
         int i;
         for (i=0; i<nimgs; i++) {
             np0->Ls_list[i] = Ls_list[i];
@@ -50,25 +51,25 @@ void del_neighbor_pair(NeighborPair** np)
         return;
     }
     if (np0->Ls_list) {
-        free(np0->Ls_list);
+        pyscf_free(np0->Ls_list);
     }
     if (np0->q_cond) {
-        free(np0->q_cond);
+        pyscf_free(np0->q_cond);
     }
     if (np0->center) {
-        free(np0->center);
+        pyscf_free(np0->center);
     }
-    free(np0);
+    pyscf_free(np0);
     *np = NULL;
 }
 
 void init_neighbor_list(NeighborList** nl, int nish, int njsh, int nimgs)
 {
-    NeighborList *nl0 = (NeighborList*) malloc(sizeof(NeighborList)); 
+    NeighborList *nl0 = (NeighborList*) pyscf_malloc(sizeof(NeighborList)); 
     nl0->nish = nish;
     nl0->njsh = njsh;
     nl0->nimgs = nimgs;
-    nl0->pairs = (NeighborPair**) malloc(sizeof(NeighborPair*)*nish*njsh);
+    nl0->pairs = (NeighborPair**) pyscf_malloc(sizeof(NeighborPair*)*nish*njsh);
     int ish, jsh;
     for (ish=0; ish<nish; ish++)
         for (jsh=0; jsh<njsh; jsh++) {
@@ -87,7 +88,7 @@ void build_neighbor_list(NeighborList** nl,
 
 #pragma omp parallel
 {
-    int *buf = (int*) malloc(sizeof(int)*nimgs);
+    int *buf = (int*) pyscf_malloc(sizeof(int)*nimgs);
     int ish, jsh, iL, nL;
     int ish_atm_id, jsh_atm_id;
     double ish_radius, jsh_radius, rmax, dij;
@@ -123,7 +124,7 @@ void build_neighbor_list(NeighborList** nl,
             init_neighbor_pair(np, nL, buf);
         }
     }
-    free(buf);
+    pyscf_free(buf);
 }
 }
 
@@ -142,9 +143,9 @@ void del_neighbor_list(NeighborList** nl)
                 del_neighbor_pair(nl0->pairs + ish*njsh+jsh);
             }
         }
-        free(nl0->pairs);
+        pyscf_free(nl0->pairs);
     }
-    free(nl0);
+    pyscf_free(nl0);
     *nl = NULL;
 }
 
@@ -167,7 +168,7 @@ int NLOpt_screen(int* shls, NeighborListOpt* opt)
 
 void NLOpt_init(NeighborListOpt **opt)
 {
-    NeighborListOpt *opt0 = malloc(sizeof(NeighborListOpt));
+    NeighborListOpt *opt0 = pyscf_malloc(sizeof(NeighborListOpt));
     opt0->nl = NULL;
     opt0->fprescreen = &NLOpt_noscreen;
     *opt = opt0;
@@ -179,7 +180,7 @@ void NLOpt_del(NeighborListOpt **opt)
     if (!opt0) {
         return;
     }
-    free(opt0);
+    pyscf_free(opt0);
     *opt = NULL;
 }
 

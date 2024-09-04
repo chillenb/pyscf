@@ -21,6 +21,10 @@
 #include "vhf/fblas.h"
 #include "np_helper/np_helper.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define GSIZE           104
 #define BLKSIZE         18
 
@@ -175,6 +179,9 @@ void PBC_ddot_CNC_s1(double *outR, double *aR, double *bR, double *cR,
 {
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         char TRANS_T = 'T';
         char TRANS_N = 'N';
         double D1 = 1;
@@ -182,7 +189,7 @@ void PBC_ddot_CNC_s1(double *outR, double *aR, double *bR, double *cR,
         int i0, i1, j0, j1, ig0, ig1;
         int i, j, ig, da, dg, dab;
         size_t nbc = nb * nc;
-        double *bufR = malloc(sizeof(double) * BLKSIZE * nb * GSIZE);
+        double *bufR = pyscf_malloc(sizeof(double) * BLKSIZE * nb * GSIZE);
         double *pbufR;
 #pragma omp for schedule(static)
         for (i0 = 0; i0 < na; i0 += BLKSIZE) { i1 = MIN(i0+BLKSIZE, na);
@@ -206,7 +213,10 @@ void PBC_ddot_CNC_s1(double *outR, double *aR, double *bR, double *cR,
                                &D1, outR+i0*nbc, &nc);
                 }
         }
-        free(bufR);
+        pyscf_free(bufR);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -218,6 +228,9 @@ void PBC_zdot_CNC_s1(double *outR, double *outI, double *aR, double *aI,
 {
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         char TRANS_T = 'T';
         char TRANS_N = 'N';
         double D1 = 1;
@@ -226,7 +239,7 @@ void PBC_zdot_CNC_s1(double *outR, double *outI, double *aR, double *aI,
         int i0, i1, j0, j1, ig0, ig1;
         int i, j, ig, da, dg, dab;
         size_t nbc = nb * nc;
-        double *bufR = malloc(sizeof(double) * BLKSIZE * nb * GSIZE * 2);
+        double *bufR = pyscf_malloc(sizeof(double) * BLKSIZE * nb * GSIZE * 2);
         double *bufI = bufR + BLKSIZE * nb * GSIZE;
         double *poutR, *poutI, *pbufR, *pbufI;
 #pragma omp for schedule(static)
@@ -261,7 +274,10 @@ void PBC_zdot_CNC_s1(double *outR, double *outI, double *aR, double *aI,
                                &ND1, cI+ig0, &ng, bufR, &gsize, &D1, outI, &nc);
                 }
         }
-        free(bufR);
+        pyscf_free(bufR);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -276,6 +292,9 @@ void PBC_kzdot_CNC_s1(double *outR, double *outI,
         int ntasks = nblocks_a * nkptij;
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         char TRANS_T = 'T';
         char TRANS_N = 'N';
         double D1 = 1;
@@ -286,7 +305,7 @@ void PBC_kzdot_CNC_s1(double *outR, double *outI,
         int i, j, ig, i0, i1, j0, j1, ig0, ig1;
         int it, kk_idx, ki, kj, da, dg, dab;
         double *aR, *aI, *bR, *bI;
-        double *bufR = malloc(sizeof(double) * BLKSIZE * nb * GSIZE * 2);
+        double *bufR = pyscf_malloc(sizeof(double) * BLKSIZE * nb * GSIZE * 2);
         double *bufI = bufR + BLKSIZE * nb * GSIZE;
         double *poutR, *poutI, *pbufR, *pbufI;
 #pragma omp for schedule(static)
@@ -332,7 +351,10 @@ void PBC_kzdot_CNC_s1(double *outR, double *outI,
                         }
                 }
         }
-        free(bufR);
+        pyscf_free(bufR);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -344,6 +366,9 @@ void PBC_zdot_CNN_s1(double *outR, double *outI, double *aR, double *aI,
 {
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         char TRANS_T = 'T';
         char TRANS_N = 'N';
         double D1 = 1;
@@ -352,7 +377,7 @@ void PBC_zdot_CNN_s1(double *outR, double *outI, double *aR, double *aI,
         int i0, i1, j0, j1, ig0, ig1;
         int i, j, ig, da, dg, dab;
         size_t nbc = nb * nc;
-        double *bufR = malloc(sizeof(double) * BLKSIZE * nb * GSIZE * 2);
+        double *bufR = pyscf_malloc(sizeof(double) * BLKSIZE * nb * GSIZE * 2);
         double *bufI = bufR + BLKSIZE * nb * GSIZE;
         double *poutR, *poutI, *pbufR, *pbufI;
 #pragma omp for schedule(static)
@@ -387,7 +412,10 @@ void PBC_zdot_CNN_s1(double *outR, double *outI, double *aR, double *aI,
                                &D1, cI+ig0, &ng, bufR, &gsize, &D1, outI, &nc);
                 }
         }
-        free(bufR);
+        pyscf_free(bufR);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -402,6 +430,9 @@ void PBC_kzdot_CNN_s1(double *outR, double *outI,
         int ntasks = nblocks_a * nkptij;
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         char TRANS_T = 'T';
         char TRANS_N = 'N';
         double D1 = 1;
@@ -412,7 +443,7 @@ void PBC_kzdot_CNN_s1(double *outR, double *outI,
         int i, j, ig, i0, i1, j0, j1, ig0, ig1;
         int it, kk_idx, ki, kj, da, dg, dab;
         double *aR, *aI, *bR, *bI;
-        double *bufR = malloc(sizeof(double) * BLKSIZE * nb * GSIZE * 2);
+        double *bufR = pyscf_malloc(sizeof(double) * BLKSIZE * nb * GSIZE * 2);
         double *bufI = bufR + BLKSIZE * nb * GSIZE;
         double *poutR, *poutI, *pbufR, *pbufI;
 #pragma omp for schedule(static)
@@ -458,7 +489,10 @@ void PBC_kzdot_CNN_s1(double *outR, double *outI,
                         }
                 }
         }
-        free(bufR);
+        pyscf_free(bufR);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -472,17 +506,20 @@ void PBC_kcontract(double *vkR, double *vkI, double *dmR, double *dmI,
 {
         size_t nao2 = nao * nao;
         size_t size_vk = n_dm * nkpts * nao2;
-        double *vtmpR = calloc(sizeof(double), size_vk*2);
+        double *vtmpR = pyscf_calloc(sizeof(double), size_vk*2);
         double *vtmpI = vtmpR + size_vk;
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         char TRANS_T = 'T';
         char TRANS_N = 'N';
         double D1 = 1.;
         double D0 = 0.;
         double N1 = -1.;
         size_t Naog = nao * ngrids;
-        double *pLqR = malloc(sizeof(double) * BLEN * nao2 * 4);
+        double *pLqR = pyscf_malloc(sizeof(double) * BLEN * nao2 * 4);
         double *pLqI = pLqR + BLEN * nao2;
         double *bufR = pLqI + BLEN * nao2;
         double *bufI = bufR + BLEN * nao2;
@@ -570,15 +607,18 @@ dgemm_(&TRANS_N, &TRANS_T, &nao, &nao, &nm, &N1, bufR, &nao, pLqI, &nao, &D1, vI
                         }
                 }
         }
-        free(pLqR);
+        pyscf_free(pLqR);
 #pragma omp barrier
 #pragma omp for schedule(static)
         for (i = 0; i < size_vk; i++) {
                 vkR[i] += vtmpR[i];
                 vkI[i] += vtmpI[i];
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(vtmpR);
+        pyscf_free(vtmpR);
 }
 
 #define BLEN    24
@@ -592,17 +632,20 @@ void PBC_kcontract_dmf(double *vkR, double *vkI, double *moR, double *moI,
         size_t nao2 = nao * nao;
         size_t naoo = nao * nocc;
         size_t size_vk = n_dm * nkpts * nao2;
-        double *vtmpR = calloc(sizeof(double), size_vk*2);
+        double *vtmpR = pyscf_calloc(sizeof(double), size_vk*2);
         double *vtmpI = vtmpR + size_vk;
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         char TRANS_T = 'T';
         char TRANS_N = 'N';
         double D1 = 1.;
         double D0 = 0.;
         double N1 = -1.;
         size_t Naog = nao * ngrids;
-        double *pLqR = malloc(sizeof(double) * BLEN * (nao2*2+naoo*4));
+        double *pLqR = pyscf_malloc(sizeof(double) * BLEN * (nao2*2+naoo*4));
         double *pLqI = pLqR + BLEN * nao2;
         double *bufR = pLqI + BLEN * nao2;
         double *bufI = bufR + BLEN * naoo;
@@ -689,13 +732,16 @@ dgemm_(&TRANS_N, &TRANS_T, &nao, &nao, &go, &N1, buf1R, &nao, bufI, &nao, &D1, v
                         }
                 }
         }
-        free(pLqR);
+        pyscf_free(pLqR);
 #pragma omp barrier
 #pragma omp for schedule(static)
         for (i = 0; i < size_vk; i++) {
                 vkR[i] += vtmpR[i];
                 vkI[i] += vtmpI[i];
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(vtmpR);
+        pyscf_free(vtmpR);
 }

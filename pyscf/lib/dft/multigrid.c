@@ -25,6 +25,7 @@
 #include "pbc/neighbor_list.h"
 #include "pbc/cell.h"
 #include "dft/multigrid.h"
+#include "np_helper/np_helper.h"
 
 #define SQUARE(r)       (r[0]*r[0]+r[1]*r[1]+r[2]*r[2])
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
@@ -64,11 +65,11 @@ double CINTsquare_dist(const double *r1, const double *r2);
 void init_gridlevel_info(GridLevel_Info** gridlevel_info,
                          double* cutoff, int* mesh, int nlevels, double rel_cutoff)
 {
-    GridLevel_Info* gl_info = (GridLevel_Info*) malloc(sizeof(GridLevel_Info));
+    GridLevel_Info* gl_info = (GridLevel_Info*) pyscf_malloc(sizeof(GridLevel_Info));
     gl_info->nlevels = nlevels;
     gl_info->rel_cutoff = rel_cutoff;
-    gl_info->cutoff = (double*) malloc(sizeof(double) * nlevels);
-    gl_info->mesh = (int*) malloc(sizeof(int) * nlevels * 3);
+    gl_info->cutoff = (double*) pyscf_malloc(sizeof(double) * nlevels);
+    gl_info->mesh = (int*) pyscf_malloc(sizeof(int) * nlevels * 3);
     int i;
     for (i = 0; i < nlevels; i++) {
         (gl_info->cutoff)[i] = cutoff[i];
@@ -82,7 +83,7 @@ void init_gridlevel_info(GridLevel_Info** gridlevel_info,
 
 void init_rs_grid(RS_Grid** rs_grid, GridLevel_Info** gridlevel_info, int comp)
 {
-    RS_Grid* rg = (RS_Grid*) malloc(sizeof(RS_Grid));
+    RS_Grid* rg = (RS_Grid*) pyscf_malloc(sizeof(RS_Grid));
     GridLevel_Info* gl_info = *gridlevel_info;
     int nlevels = gl_info->nlevels;
     rg->nlevels = nlevels;
@@ -92,10 +93,10 @@ void init_rs_grid(RS_Grid** rs_grid, GridLevel_Info** gridlevel_info, int comp)
     int i;
     size_t ngrid;
     int *mesh = gl_info->mesh;
-    rg->data = (double**)malloc(sizeof(double*) * nlevels);
+    rg->data = (double**)pyscf_malloc(sizeof(double*) * nlevels);
     for (i = 0; i < nlevels; i++) {
         ngrid = mesh[i*3] * mesh[i*3+1] * mesh[i*3+2];
-        (rg->data)[i] = calloc(comp*ngrid, sizeof(double));
+        (rg->data)[i] = pyscf_calloc(comp*ngrid, sizeof(double));
     }
     *rs_grid = rg;
 }
@@ -111,13 +112,13 @@ void del_rs_grid(RS_Grid** rs_grid)
         int i;
         for (i = 0; i < rg->nlevels; i++) {
             if (rg->data[i]) {
-                free(rg->data[i]);
+                pyscf_free(rg->data[i]);
             }
         }
-        free(rg->data);
+        pyscf_free(rg->data);
     }
     rg->gridlevel_info = NULL;
-    free(rg);
+    pyscf_free(rg);
     *rs_grid = NULL;
 }
 
@@ -129,12 +130,12 @@ void del_gridlevel_info(GridLevel_Info** gridlevel_info)
         return;
     }
     if (gl_info->cutoff) {
-        free(gl_info->cutoff);
+        pyscf_free(gl_info->cutoff);
     }
     if (gl_info->mesh) {
-        free(gl_info->mesh);
+        pyscf_free(gl_info->mesh);
     }
-    free(gl_info);
+    pyscf_free(gl_info);
     *gridlevel_info = NULL;
 }
 
@@ -142,7 +143,7 @@ void del_gridlevel_info(GridLevel_Info** gridlevel_info)
 void init_pgfpair(PGFPair** pair_info,
                   int ish, int ipgf, int jsh, int jpgf, int iL, double radius)
 {
-    PGFPair *pair0 = (PGFPair*) malloc(sizeof(PGFPair));
+    PGFPair *pair0 = (PGFPair*) pyscf_malloc(sizeof(PGFPair));
     pair0->ish = ish;
     pair0->ipgf = ipgf;
     pair0->jsh = jsh;
@@ -226,7 +227,7 @@ void del_pgfpair(PGFPair** pair_info)
     if (!pair0) {
         return;
     } else {
-        free(pair0);
+        pyscf_free(pair0);
     }
     *pair_info = NULL;
 }
@@ -241,10 +242,10 @@ void nullify_pgfpair(PGFPair** pair_info)
 
 void init_task(Task** task)
 {
-    Task *t0 = *task = (Task*) malloc(sizeof(Task));
+    Task *t0 = *task = (Task*) pyscf_malloc(sizeof(Task));
     t0->ntasks = 0;
     t0->buf_size = BUF_SIZE; 
-    t0->pgfpairs = (PGFPair**) malloc(sizeof(PGFPair*) * t0->buf_size);
+    t0->pgfpairs = (PGFPair**) pyscf_malloc(sizeof(PGFPair*) * t0->buf_size);
     int i;
     for (i = 0; i < t0->buf_size; i++) {
         (t0->pgfpairs)[i] = NULL;
@@ -263,9 +264,9 @@ void del_task(Task** task)
         for (i = 0; i < ntasks; i++) {
             del_pgfpair(t0->pgfpairs + i);
         }
-        free(t0->pgfpairs);
+        pyscf_free(t0->pgfpairs);
     }
-    free(t0);
+    pyscf_free(t0);
     *task = NULL;
 }
 
@@ -281,20 +282,20 @@ void nullify_task(Task** task)
         for (i = 0; i < ntasks; i++) {
             nullify_pgfpair(t0->pgfpairs + i);
         }
-        free(t0->pgfpairs);
+        pyscf_free(t0->pgfpairs);
     }
-    free(t0);
+    pyscf_free(t0);
     *task = NULL;
 }
 
 
 void init_task_list(TaskList** task_list, GridLevel_Info* gridlevel_info, int nlevels, int hermi)
 {
-    TaskList* tl = *task_list = (TaskList*) malloc(sizeof(TaskList));
+    TaskList* tl = *task_list = (TaskList*) pyscf_malloc(sizeof(TaskList));
     tl->nlevels = nlevels;
     tl->hermi = hermi;
     tl->gridlevel_info = gridlevel_info;
-    tl->tasks = (Task**) malloc(sizeof(Task*)*nlevels);
+    tl->tasks = (Task**) pyscf_malloc(sizeof(Task*)*nlevels);
     int i;
     for (i = 0; i < nlevels; i++) {
         init_task(tl->tasks + i);
@@ -319,9 +320,9 @@ void del_task_list(TaskList** task_list)
                 del_task(tl->tasks + i);
             }
         }
-        free(tl->tasks);
+        pyscf_free(tl->tasks);
     }
-    free(tl);
+    pyscf_free(tl);
     *task_list = NULL;
 }
 
@@ -342,9 +343,9 @@ void nullify_task_list(TaskList** task_list)
                 nullify_task(tl->tasks + i);
             }
         }
-        free(tl->tasks);
+        pyscf_free(tl->tasks);
     }
-    free(tl);
+    pyscf_free(tl);
     *task_list = NULL;
 }
 
@@ -420,7 +421,7 @@ void build_task_list(TaskList** task_list, NeighborList** neighbor_list,
 #pragma omp parallel private(ilevel)
 {
     double max_radius_loc[nlevels];
-    TaskList** task_list_loc = (TaskList**) malloc(sizeof(TaskList*));
+    TaskList** task_list_loc = (TaskList**) pyscf_malloc(sizeof(TaskList*));
     init_task_list(task_list_loc, gl_info, nlevels, hermi);
     NeighborPair *np0_ij;
     int ish, jsh;
@@ -493,7 +494,7 @@ void build_task_list(TaskList** task_list, NeighborList** neighbor_list,
     merge_task_list(task_list, task_list_loc);
 
     nullify_task_list(task_list_loc);
-    free(task_list_loc);
+    pyscf_free(task_list_loc);
 
     #pragma omp critical
     for (ilevel = 0; ilevel < nlevels; ilevel++) {
@@ -515,7 +516,7 @@ int get_task_loc(int** task_loc, PGFPair** pgfpairs, int ntasks,
     int ish_prev = -1;
     int jsh_prev = -1;
     int itask, ish, jsh;
-    int *buf = (int*)malloc(sizeof(int) * ntasks*2);
+    int *buf = (int*)pyscf_malloc(sizeof(int) * ntasks*2);
     PGFPair *pgfpair;
     for(itask = 0; itask < ntasks; itask++){
         pgfpair = pgfpairs[itask];
@@ -580,7 +581,7 @@ int get_task_loc_diff_ish(int** task_loc, PGFPair** pgfpairs, int ntasks,
     int n = -2;
     int ish_prev = -1;
     int itask, ish;
-    int *buf = (int*)malloc(sizeof(int) * ntasks*2);
+    int *buf = (int*)pyscf_malloc(sizeof(int) * ntasks*2);
     PGFPair *pgfpair;
     for(itask = 0; itask < ntasks; itask++){
         pgfpair = pgfpairs[itask];
@@ -616,7 +617,7 @@ void init_task_index(Task_Index* task_idx)
 {
     task_idx->ntasks = 0;
     task_idx->bufsize = 10;
-    task_idx->task_index = (int*)malloc(sizeof(int) * task_idx->bufsize);
+    task_idx->task_index = (int*)pyscf_malloc(sizeof(int) * task_idx->bufsize);
 }
 
 
@@ -637,7 +638,7 @@ void del_task_index(Task_Index* task_idx)
         return;
     }
     if (task_idx->task_index) {
-        free(task_idx->task_index);
+        pyscf_free(task_idx->task_index);
     }
     task_idx->ntasks = 0;
     task_idx->bufsize = 0;
@@ -660,7 +661,7 @@ void init_shlpair_task_index(Shlpair_Task_Index* shlpair_task_idx,
     shlpair_task_idx->jsh0 = jsh0;
     shlpair_task_idx->nish = nish;
     shlpair_task_idx->njsh = njsh;
-    shlpair_task_idx->task_index = (Task_Index*)malloc(sizeof(Task_Index)*nish*njsh);
+    shlpair_task_idx->task_index = (Task_Index*)pyscf_malloc(sizeof(Task_Index)*nish*njsh);
 
     int ijsh;
     for (ijsh = 0; ijsh < nish*njsh; ijsh++) {
@@ -708,7 +709,7 @@ void del_shlpair_task_index(Shlpair_Task_Index* shlpair_task_idx)
     for (ijsh = 0; ijsh < nish*njsh; ijsh++) {
         del_task_index(shlpair_task_idx->task_index + ijsh);
     }
-    free(shlpair_task_idx->task_index);
+    pyscf_free(shlpair_task_idx->task_index);
 }
 
 
@@ -718,7 +719,7 @@ Shlpair_Task_Index* get_shlpair_task_index(PGFPair** pgfpairs, int ntasks,
     const int nish = ish1 - ish0;
     const int njsh = jsh1 - jsh0;
 
-    Shlpair_Task_Index* shlpair_task_idx = (Shlpair_Task_Index*) malloc(sizeof(Shlpair_Task_Index));
+    Shlpair_Task_Index* shlpair_task_idx = (Shlpair_Task_Index*) pyscf_malloc(sizeof(Shlpair_Task_Index));
     init_shlpair_task_index(shlpair_task_idx, ish0, jsh0, nish, njsh);
 
     int itask;
