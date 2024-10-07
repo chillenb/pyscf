@@ -358,7 +358,7 @@ void update_task_list(TaskList** task_list, int grid_level,
     t0->ntasks += 1;
     if (t0->ntasks > t0->buf_size) {
         t0->buf_size += ADD_SIZE;
-        t0->pgfpairs = (PGFPair**) realloc(t0->pgfpairs, sizeof(PGFPair*) * t0->buf_size);
+        t0->pgfpairs = (PGFPair**) pyscf_realloc(t0->pgfpairs, sizeof(PGFPair*) * t0->buf_size);
     }
     init_pgfpair(t0->pgfpairs + t0->ntasks - 1,
                  ish, ipgf, jsh, jpgf, iL, radius);
@@ -377,7 +377,7 @@ void merge_task_list(TaskList** task_list, TaskList** task_list_loc)
         int ntasks_loc = t1->ntasks;
         t0->ntasks += ntasks_loc;
         t0->buf_size = t0->ntasks;
-        t0->pgfpairs = (PGFPair**) realloc(t0->pgfpairs, sizeof(PGFPair*) * t0->buf_size);
+        t0->pgfpairs = (PGFPair**) pyscf_realloc(t0->pgfpairs, sizeof(PGFPair*) * t0->buf_size);
         PGFPair** ptr_pgfpairs = t0->pgfpairs + itask_off;
         PGFPair** ptr_pgfpairs_loc = t1->pgfpairs;
         for (itask = 0; itask < ntasks_loc; itask++) {
@@ -543,7 +543,7 @@ int get_task_loc(int** task_loc, PGFPair** pgfpairs, int ntasks,
         }
     }
     n += 2;
-    *task_loc = (int*)realloc(buf, sizeof(int) * n);
+    *task_loc = (int*)pyscf_realloc(buf, sizeof(int) * n);
     return n;
 }
 
@@ -600,7 +600,7 @@ int get_task_loc_diff_ish(int** task_loc, PGFPair** pgfpairs, int ntasks,
         }
     }
     n += 2;
-    *task_loc = (int*)realloc(buf, sizeof(int) * n);
+    *task_loc = (int*)pyscf_realloc(buf, sizeof(int) * n);
     return n;
 }
 */
@@ -626,7 +626,7 @@ void update_task_index(Task_Index* task_idx, int itask)
     task_idx->ntasks += 1;
     if (task_idx->bufsize < task_idx->ntasks) {
         task_idx->bufsize += 10;
-        task_idx->task_index = (int*)realloc(task_idx->task_index, sizeof(int) * task_idx->bufsize);
+        task_idx->task_index = (int*)pyscf_realloc(task_idx->task_index, sizeof(int) * task_idx->bufsize);
     }
     task_idx->task_index[task_idx->ntasks-1] = itask;
 }

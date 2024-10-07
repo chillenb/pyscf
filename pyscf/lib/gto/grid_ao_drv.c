@@ -204,22 +204,31 @@ static void _fill_grid2atm(double *grid2atm, double *coord, size_t bgrids, size_
 
 static void _dset0(double *out, size_t odim, size_t bgrids, int counts)
 {
+#ifndef PYSCF_USE_MKL
         size_t i, j;
         for (i = 0; i < counts; i++) {
                 for (j = 0; j < bgrids; j++) {
                         out[i*odim+j] = 0;
                 }
         }
+#else
+        LAPACKE_dlaset(LAPACK_ROW_MAJOR, 'A', counts, bgrids, 0.0, 0.0, out, odim);
+#endif
 }
 
 static void _zset0(double complex *out, size_t odim, size_t bgrids, int counts)
 {
+#ifndef PYSCF_USE_MKL
         size_t i, j;
         for (i = 0; i < counts; i++) {
                 for (j = 0; j < bgrids; j++) {
                         out[i*odim+j] = 0;
                 }
         }
+#else
+        MKL_Complex16 zero = {0.0, 0.0};
+        LAPACKE_zlaset(LAPACK_ROW_MAJOR, 'A', counts, bgrids, zero, zero, (MKL_Complex16*) out, odim);
+#endif
 }
 
 void GTOeval_sph_iter(FPtr_eval feval,  FPtr_exp fexp, double fac,

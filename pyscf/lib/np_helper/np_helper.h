@@ -66,6 +66,11 @@ void NPzset0(double complex *p, const size_t n);
 void NPdcopy(double *out, const double *in, const size_t n);
 void NPzcopy(double complex *out, const double complex *in, const size_t n);
 
+void NPomp_dset0(double *p, const size_t n);
+void NPomp_zset0(double complex *p, const size_t n);
+void NPomp_dmul(double *A, double *B, double *out, size_t n);
+void NPomp_zmul(double complex *A, double complex *B, double complex *out, size_t n);
+
 void NPdgemm(const char trans_a, const char trans_b,
              const int m, const int n, const int k,
              const int lda, const int ldb, const int ldc,
@@ -75,5 +80,6 @@ void NPdgemm(const char trans_a, const char trans_b,
 
 void *pyscf_malloc(size_t alloc_size);
 void *pyscf_calloc(size_t n, size_t size);
+void *pyscf_realloc(void *ptr, size_t size);
 void pyscf_free(void *ptr);
 int pyscf_has_mkl(void);

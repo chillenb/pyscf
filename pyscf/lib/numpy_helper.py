@@ -1092,6 +1092,24 @@ def condense(opname, a, loc_x, loc_y=None):
         out[:,j] = op(tmp[:,j0:j1], axis=1)
     return out
 
+def dmul(A, B, out=None):
+    '''A * B'''
+    Aflat = A.reshape(-1)
+    Bflat = B.reshape(-1)
+    if out is None:
+        out = numpy.empty_like(Aflat)
+    else:
+        out = out.reshape(-1)
+    if Aflat.size != Bflat.size or Aflat.size != out.size:
+        raise ValueError(f'Incompatible sizes: {Aflat.size}, {Bflat.size} -> {out.size}')
+    if not Aflat.flags.contiguous or not Bflat.flags.contiguous or not out.flags.contiguous:
+        raise ValueError('Input arrays must be contiguous')
+    _np_helper.NPomp_dmul(Aflat.ctypes.data_as(ctypes.c_void_p),
+                          Bflat.ctypes.data_as(ctypes.c_void_p),
+                            out.ctypes.data_as(ctypes.c_void_p),
+                            ctypes.c_size_t(Aflat.size))
+    return out
+
 def expm(a):
     '''Equivalent to scipy.linalg.expm'''
     bs = [a.copy()]
