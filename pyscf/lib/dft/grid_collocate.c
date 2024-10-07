@@ -498,6 +498,10 @@ void build_core_density(void (*eval_rho)(), double* rho,
     if (thread_id != 0) {
         pyscf_free(rho_priv);
     }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
