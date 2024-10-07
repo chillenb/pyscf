@@ -44,7 +44,7 @@ jobs:
   linux-build-mkl:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         os: [ubuntu-20.04]
         python-version: ["3.12"]

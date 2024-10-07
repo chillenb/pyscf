@@ -77,3 +77,11 @@ void pyscf_free(void *ptr)
         free(ptr);
 #endif
 }
+
+int pyscf_has_mkl(void) {
+#ifdef PYSCF_USE_MKL
+        return 1;
+#else
+        return 0;
+#endif
+}

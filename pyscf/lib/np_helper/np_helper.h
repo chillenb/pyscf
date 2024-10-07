@@ -76,3 +76,4 @@ void NPdgemm(const char trans_a, const char trans_b,
 void *pyscf_malloc(size_t alloc_size);
 void *pyscf_calloc(size_t n, size_t size);
 void pyscf_free(void *ptr);
+int pyscf_has_mkl(void);

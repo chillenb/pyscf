@@ -1406,6 +1406,20 @@ def isin_1d(v, vs, return_index=False):
             idx = idx[0]
         return v_in_vs, idx
 
+def pyscf_has_mkl():
+    '''Check if PySCF is linked directly with Intel MKL
+
+    Returns:
+        bool : True if PySCF has been built with MKL, False otherwise.
+    '''
+
+    fn = _np_helper.pyscf_has_mkl
+    fn.restype = ctypes.c_int
+    fn.argtypes = []
+    if fn() == 1:
+        return True
+    return False
+
 if __name__ == '__main__':
     a = numpy.random.random((30,40,5,10))
     b = numpy.random.random((10,30,5,20))
