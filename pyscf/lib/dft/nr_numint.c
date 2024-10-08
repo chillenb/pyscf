@@ -221,10 +221,6 @@ void VXC_dscale_ao(double *aow, double *ao, double *wv,
 {
 #pragma omp parallel
 {
-#ifdef PYSCF_USE_MKL
-        int save = mkl_set_num_threads_local(1);
-#endif
-
         size_t Ngrids = ngrids;
         size_t ao_size = nao * Ngrids;
         int i, j, ic;
@@ -240,10 +236,6 @@ void VXC_dscale_ao(double *aow, double *ao, double *wv,
                         aow[i*Ngrids+j] += pao[ic*ao_size+j] * wv[ic*Ngrids+j];
                 } }
         }
-
-#ifdef PYSCF_USE_MKL
-        mkl_set_num_threads_local(save);
-#endif
 }
 }
 
@@ -253,10 +245,6 @@ void VXC_dcontract_rho(double *rho, double *bra, double *ket,
 {
 #pragma omp parallel
 {
-#ifdef PYSCF_USE_MKL
-        int save = mkl_set_num_threads_local(1);
-#endif
-
         size_t Ngrids = ngrids;
         int nthread = omp_get_num_threads();
         int blksize = MAX((Ngrids+nthread-1) / nthread, 1);
@@ -273,10 +261,6 @@ void VXC_dcontract_rho(double *rho, double *bra, double *ket,
                         rho[j] += bra[i*Ngrids+j] * ket[i*Ngrids+j];
                 } }
         }
-
-#ifdef PYSCF_USE_MKL
-        mkl_set_num_threads_local(save);
-#endif
 }
 }
 
@@ -287,10 +271,6 @@ void VXC_vv10nlc(double *Fvec, double *Uvec, double *Wvec,
 {
 #pragma omp parallel
 {
-#ifdef PYSCF_USE_MKL
-        int save = mkl_set_num_threads_local(1);
-#endif
-
         double DX, DY, DZ, R2;
         double gp, g, gt, T, F, U, W;
         int i, j;
@@ -318,9 +298,6 @@ void VXC_vv10nlc(double *Fvec, double *Uvec, double *Wvec,
                 Wvec[i] = W;
         }
 
-#ifdef PYSCF_USE_MKL
-        mkl_set_num_threads_local(save);
-#endif
 }
 }
 
@@ -330,10 +307,6 @@ void VXC_vv10nlc_grad(double *Fvec, double *vvcoords, double *coords,
 {
 #pragma omp parallel
 {
-#ifdef PYSCF_USE_MKL
-        int save = mkl_set_num_threads_local(1);
-#endif
-
         double DX, DY, DZ, R2;
         double gp, g, gt, T, Q, FX, FY, FZ;
         int i, j;
@@ -361,8 +334,5 @@ void VXC_vv10nlc_grad(double *Fvec, double *vvcoords, double *coords,
                 Fvec[i*3+2] = FZ * -3;
         }
 
-#ifdef PYSCF_USE_MKL
-        mkl_set_num_threads_local(save);
-#endif
 }
 }

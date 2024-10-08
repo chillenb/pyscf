@@ -97,10 +97,6 @@ void get_cart2sph_coeff(double** contr_coeff, double** gto_norm,
                               ncart, nsph, nprim, nctr,\
                               ptr_exp, ptr_coeff)
 {
-#ifdef PYSCF_USE_MKL
-        int save = mkl_set_num_threads_local(1);
-#endif
-
     #pragma omp for schedule(dynamic) 
     for (ish = ish0; ish < ish1; ish++) {
         l = bas[ANG_OF+ish*BAS_SLOTS];
@@ -137,9 +133,6 @@ void get_cart2sph_coeff(double** contr_coeff, double** gto_norm,
         pyscf_free(buf);
     }
 
-#ifdef PYSCF_USE_MKL
-        mkl_set_num_threads_local(save);
-#endif
 }
 
     for (l = 0; l <= lmax; l++) {

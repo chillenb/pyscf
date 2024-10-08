@@ -1152,9 +1152,6 @@ void VXCdscale_ao_sparse(double *aow, double *ao, double *wv,
 {
 #pragma omp parallel
 {
-#ifdef PYSCF_USE_MKL
-        int save = mkl_set_num_threads_local(1);
-#endif
         size_t Ngrids = ngrids;
         size_t ao_size = nao * Ngrids;
         int ish, i, j, ic, i0, i1, ig0, ig1, row;
@@ -1180,8 +1177,5 @@ for (i = i0; i < i1; i++) {
                         }
                 }
         }
-#ifdef PYSCF_USE_MKL
-        mkl_set_num_threads_local(save);
-#endif
 }
 }

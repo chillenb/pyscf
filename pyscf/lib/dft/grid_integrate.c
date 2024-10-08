@@ -86,6 +86,7 @@ static void fill_tril(double* mat, int comp, int* ish_ao_loc, int* jsh_ao_loc,
     double *pmat_up = mat + i0*((size_t)naoj) + j0;
     double *pmat_low = mat + j0*((size_t)naoj) + i0;
     int ic, i, j;
+#ifndef PYSCF_USE_MKL
     for (ic = 0; ic < comp; ic++) {
         for (i = 0; i < ni; i++) {
             for (j = 0; j < nj; j++) {
@@ -95,6 +96,13 @@ static void fill_tril(double* mat, int comp, int* ish_ao_loc, int* jsh_ao_loc,
         pmat_up += nao2;
         pmat_low += nao2;
     }
+#else
+    mkl_domatcopy_batch_strided(
+        'R', 'T', ni, nj,
+        1.0, pmat_up, naoj, nao2,
+        pmat_low, naoj, nao2, comp
+    );
+#endif
 }
 
 

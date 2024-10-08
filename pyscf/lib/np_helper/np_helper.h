@@ -36,6 +36,20 @@
                 for (I = 0, j1 = MIN(j0+BLOCK_DIM, n); I < j1; I++) \
                         for (J = MAX(I,j0); J < j1; J++)
 
+#ifdef PYSCF_USE_MKL
+#define pyscf_malloc(SZ) mkl_malloc((SZ), 64)
+#define pyscf_free mkl_free
+#define pyscf_calloc(n, SZ) mkl_calloc((n), (SZ), 64)
+#define pyscf_realloc mkl_realloc
+
+#else
+
+#define pyscf_malloc malloc
+#define pyscf_free free
+#define pyscf_calloc calloc
+#define pyscf_realloc realloc
+#endif
+
 void NPdsymm_triu(int n, double *mat, int hermi);
 void NPzhermi_triu(int n, double complex *mat, int hermi);
 void NPdunpack_tril(int n, double *tril, double *mat, int hermi);
@@ -78,8 +92,4 @@ void NPdgemm(const char trans_a, const char trans_b,
              double *a, double *b, double *c,
              const double alpha, const double beta);
 
-void *pyscf_malloc(size_t alloc_size);
-void *pyscf_calloc(size_t n, size_t size);
-void *pyscf_realloc(void *ptr, size_t size);
-void pyscf_free(void *ptr);
 int pyscf_has_mkl(void);

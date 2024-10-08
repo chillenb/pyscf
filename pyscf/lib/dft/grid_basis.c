@@ -34,6 +34,7 @@ void VXCgen_grid(double *out, double *coords, double *atm_coords,
         int i, j;
         double dx, dy, dz;
         double *atom_dist = pyscf_malloc(sizeof(double) * natm*natm);
+
         for (i = 0; i < natm; i++) {
                 for (j = 0; j < i; j++) {
                         dx = atm_coords[i*3+0] - atm_coords[j*3+0];

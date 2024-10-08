@@ -180,7 +180,10 @@ void CCload_eri(double *out, double *eri, int *orbs_slice, int nao)
 #endif
         int i, j, k, l, ij;
         double *pout;
+
+#ifndef PYSCF_USE_MKL
         double *buf = pyscf_malloc(sizeof(double) * nao*nao);
+
 #pragma omp for schedule (static)
         for (ij = 0; ij < ni*nj; ij++) {
                 i = ij / nj;
@@ -193,7 +196,18 @@ void CCload_eri(double *out, double *eri, int *orbs_slice, int nao)
                 } }
         }
         pyscf_free(buf);
-#ifdef PYSCF_USE_MKL
+
+#else
+
+#pragma omp for schedule(static)
+        for (ij = 0; ij < ni*nj; ij++) {
+                i = ij / nj;
+                j = ij % nj;
+                pout = out + (i*nn+j)*nao;
+                LAPACKE_mkl_dtpunpack(LAPACK_ROW_MAJOR, 'L', 'N', nao, eri+ij*nao_pair, 1, 1, nao, nao, pout, nn);
+                LAPACKE_mkl_dtpunpack(LAPACK_ROW_MAJOR, 'L', 'T', nao, eri+ij*nao_pair, 1, 1, nao, nao, pout, nn);
+        }
+
         mkl_set_num_threads_local(save);
 #endif
 }

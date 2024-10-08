@@ -51,42 +51,6 @@ void NPzcopy(double complex *out, const double complex *in, const size_t n)
         }
 }
 
-void* pyscf_malloc(size_t alloc_size)
-{
-#ifdef PYSCF_USE_MKL
-        return mkl_malloc(alloc_size, 64);
-#else
-        return malloc(alloc_size);
-#endif
-}
-
-void *pyscf_calloc(size_t n, size_t size)
-{
-#ifdef PYSCF_USE_MKL
-        return mkl_calloc(n, size, 64);
-#else
-        return calloc(n, size);
-#endif
-}
-
-void pyscf_free(void *ptr)
-{
-#ifdef PYSCF_USE_MKL
-        mkl_free(ptr);
-#else
-        free(ptr);
-#endif
-}
-
-void *pyscf_realloc(void *ptr, size_t size)
-{
-#ifdef PYSCF_USE_MKL
-        return mkl_realloc(ptr, size);
-#else
-        return realloc(ptr, size);
-#endif
-}
-
 int pyscf_has_mkl(void) {
 #ifdef PYSCF_USE_MKL
         return 1;
