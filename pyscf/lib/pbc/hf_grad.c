@@ -44,6 +44,10 @@ void contract_vhf_dm(double* out, double* vhf, double* dm,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
     size_t ij, ish, jsh, p0, q0;
     int ni, nj, i, ic, iatm, nimgs=1;
     NeighborList *nl0=NULL;
@@ -57,7 +61,7 @@ void contract_vhf_dm(double* out, double* vhf, double* dm,
     if (thread_id == 0) {
         buf = out;
     } else {
-        buf = calloc(comp*natm, sizeof(double));
+        buf = pyscf_calloc(comp*natm, sizeof(double));
     }
     out_bufs[thread_id] = buf;
 
@@ -89,7 +93,11 @@ void contract_vhf_dm(double* out, double* vhf, double* dm,
 
     NPomp_dsum_reduce_inplace(out_bufs, comp*natm);
     if (thread_id != 0) {
-        free(buf);
+        pyscf_free(buf);
     }
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
 }

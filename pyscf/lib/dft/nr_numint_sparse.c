@@ -23,6 +23,10 @@
 #include "cint.h"
 #include "vhf/fblas.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define ALIGNMENT       8
 #define UNROLL_SIZE     (ALIGNMENT*7)
 #define BLKSIZE         (ALIGNMENT*7)
@@ -229,16 +233,19 @@ void VXCdot_ao_dm_sparse(double *out, double *ao, double *dm,
 {
         size_t Ngrids = ngrids;
         int shls_slice[2] = {0, nbas};
-        int *box_l1_loc = malloc(sizeof(int) * (nbas+1));
+        int *box_l1_loc = pyscf_malloc(sizeof(int) * (nbas+1));
         int nbox_l1 = CVHFshls_block_partition(box_l1_loc, shls_slice, ao_loc, BOXSIZE1_N);
         int mask_l1_size = (ngrids + BOXSIZE1_M - 1)/BOXSIZE1_M * nbox_l1;
-        uint8_t *mask_l1 = malloc(sizeof(uint8_t) * mask_l1_size);
+        uint8_t *mask_l1 = pyscf_malloc(sizeof(uint8_t) * mask_l1_size);
         mask_l1_abstract(mask_l1, screen_index, box_l1_loc, nbox_l1, ngrids, nbas);
         int ngrids_align_down = (ngrids / BLKSIZE) * BLKSIZE;
 
         if (nao * 2 < ngrids) {
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+                int save = mkl_set_num_threads_local(1);
+#endif
                 int ig, j, j0, j1, jsh0, jsh1, ib, jb, ig0, ig1, ig_box2;
 #pragma omp for schedule(dynamic)
                 for (ig0 = 0; ig0 < ngrids_align_down; ig0+=BOXSIZE1_M) {
@@ -264,10 +271,16 @@ _dot_ao_dm_l1(out, ao, dm, nao, ngrids, nbas, ig0, ig1,
                                 }
                         }
                 }
+#ifdef PYSCF_USE_MKL
+                mkl_set_num_threads_local(save);
+#endif
 }
         } else {
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+                int save = mkl_set_num_threads_local(1);
+#endif
                 int ig, j, j0, j1, jsh0, jsh1, ib, jb, ig0, ig1, ig_box2;
 #pragma omp for schedule(dynamic)
                 for (jb = 0; jb < nbox_l1; jb++) {
@@ -293,14 +306,17 @@ _dot_ao_dm_l1(out, ao, dm, nao, ngrids, nbas, ig0, ig1,
                                 }
                         }
                 }
+#ifdef PYSCF_USE_MKL
+                mkl_set_num_threads_local(save);
+#endif
 }
         }
         if (ngrids_align_down < ngrids) {
                 _dot_ao_dm_frac(out, ao, dm, nao, ngrids, nbas, ngrids_align_down,
                                 nbins, screen_index, pair_mask, ao_loc);
         }
-        free(box_l1_loc);
-        free(mask_l1);
+        pyscf_free(box_l1_loc);
+        pyscf_free(mask_l1);
 }
 
 static void _dot_aow_ao_l1(double *out, double *bra, double *ket, double *wv,
@@ -575,8 +591,11 @@ void VXCdot_aow_ao_dense(double *out, double *bra, double *ket, double *wv,
         const double D1 = 1;
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int i0, ig, i, di, ig0, ig1, dg;
-        double *buf = malloc(sizeof(double) * (ngrids_blksize * nao_blksize + ALIGNMENT));
+        double *buf = pyscf_malloc(sizeof(double) * (ngrids_blksize * nao_blksize + ALIGNMENT));
         double *braw = (double *)((uintptr_t)(buf + ALIGNMENT - 1) & (-(uintptr_t)(ALIGNMENT*8)));
         double *pbra;
 #pragma omp for schedule(dynamic) nowait
@@ -595,7 +614,10 @@ void VXCdot_aow_ao_dense(double *out, double *bra, double *ket, double *wv,
                                &D1, out+i0*Nao, &nao);
                 }
         }
-        free(buf);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
+        pyscf_free(buf);
 }
 }
 
@@ -606,20 +628,23 @@ void VXCdot_aow_ao_sparse(double *out, double *bra, double *ket, double *wv,
 {
         size_t Nao = nao;
         int shls_slice[2] = {0, nbas};
-        int *box_l1_loc = malloc(sizeof(int) * (nbas+1));
+        int *box_l1_loc = pyscf_malloc(sizeof(int) * (nbas+1));
         int nbox_l1 = CVHFshls_block_partition(box_l1_loc, shls_slice, ao_loc, BOXSIZE1_N);
         int mask_l1_size = (ngrids + BOXSIZE1_M - 1)/BOXSIZE1_M * nbox_l1;
-        uint8_t *mask_l1 = malloc(sizeof(uint8_t) * mask_l1_size);
+        uint8_t *mask_l1 = pyscf_malloc(sizeof(uint8_t) * mask_l1_size);
         mask_l1_abstract(mask_l1, screen_index, box_l1_loc, nbox_l1, ngrids, nbas);
         int ngrids_align_down = (ngrids / BOXSIZE1_M) * BOXSIZE1_M;
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int ijb, ib, jb, ib0, jb0, ib1, jb1, ig0, ig1, ig_box2;
         int ish0, ish1, jsh0, jsh1, i0, i1, j0, j1, ni, nj, i, j, n;
         double s;
         double *pout;
-        double *buf = malloc(sizeof(double) * (BOXSIZE1_N*BOXSIZE1_N*ALIGNMENT+ALIGNMENT));
+        double *buf = pyscf_malloc(sizeof(double) * (BOXSIZE1_N*BOXSIZE1_N*ALIGNMENT+ALIGNMENT));
         double *outbuf = (double *)((uintptr_t)(buf+ALIGNMENT-1) & (-(uintptr_t)(ALIGNMENT*sizeof(double))));
 #pragma omp for schedule(dynamic, 4) nowait
         for (ijb = 0; ijb < nbox_l1*nbox_l1; ijb++) {
@@ -673,10 +698,13 @@ _dot_aow_ao_l1(outbuf, bra, ket, wv, nao, ngrids, nbas, ig0, ig1,
                         out[(i0+i)*Nao+j0+j] += s;
                 } }
         }
-        free(buf);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
+        pyscf_free(buf);
 }
-        free(box_l1_loc);
-        free(mask_l1);
+        pyscf_free(box_l1_loc);
+        pyscf_free(mask_l1);
 
         if (hermi != 0) {
                 NPdsymm_triu(nao, out, hermi);
@@ -893,21 +921,24 @@ void VXCdot_ao_ao_sparse(double *out, double *bra, double *ket,
 {
         size_t Nao = nao;
         int shls_slice[2] = {0, nbas};
-        int *box_l1_loc = malloc(sizeof(int) * (nbas+1));
+        int *box_l1_loc = pyscf_malloc(sizeof(int) * (nbas+1));
         int nbox_l1 = CVHFshls_block_partition(box_l1_loc, shls_slice, ao_loc, BOXSIZE1_N);
         int mask_l1_size = (ngrids + BOXSIZE1_M - 1)/BOXSIZE1_M * nbox_l1;
-        uint8_t *mask_l1 = malloc(sizeof(uint8_t) * mask_l1_size);
+        uint8_t *mask_l1 = pyscf_malloc(sizeof(uint8_t) * mask_l1_size);
         mask_l1_abstract(mask_l1, screen_index, box_l1_loc,
                          nbox_l1, ngrids, nbas);
         int ngrids_align_down = (ngrids / BOXSIZE1_M) * BOXSIZE1_M;
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int ijb, ib, jb, ib0, jb0, ib1, jb1, ig0, ig1, ig_box2;
         int ish0, ish1, jsh0, jsh1, i0, i1, j0, j1, ni, nj, i, j, n;
         double s;
         double *pout;
-        double *buf = malloc(sizeof(double) * (BOXSIZE1_N*BOXSIZE1_N*ALIGNMENT+ALIGNMENT));
+        double *buf = pyscf_malloc(sizeof(double) * (BOXSIZE1_N*BOXSIZE1_N*ALIGNMENT+ALIGNMENT));
         double *outbuf = (double *)((uintptr_t)(buf+ALIGNMENT-1) & (-(uintptr_t)(ALIGNMENT*sizeof(double))));
 #pragma omp for schedule(dynamic, 4) nowait
         for (ijb = 0; ijb < nbox_l1*nbox_l1; ijb++) {
@@ -961,10 +992,13 @@ _dot_ao_ao_l1(outbuf, bra, ket, nao, ngrids, nbas, ig0, ig1,
                         out[(i0+i)*Nao+j0+j] += s;
                 } }
         }
-        free(buf);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
+        pyscf_free(buf);
 }
-        free(box_l1_loc);
-        free(mask_l1);
+        pyscf_free(box_l1_loc);
+        pyscf_free(mask_l1);
 
         if (hermi != 0) {
                 NPdsymm_triu(nao, out, hermi);
@@ -984,6 +1018,9 @@ void VXCdcontract_rho_sparse(double *rho, double *bra, double *ket,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+                int save = mkl_set_num_threads_local(1);
+#endif
                 size_t Ngrids = ngrids;
                 size_t i_addr;
                 int ig0, row, ish, i0, i1, n, i;
@@ -1010,6 +1047,9 @@ void VXCdcontract_rho_sparse(double *rho, double *bra, double *ket,
                                 rho[ig0+n] = s8[n];
                         }
                 }
+#ifdef PYSCF_USE_MKL
+                mkl_set_num_threads_local(save);
+#endif
 }
                 if (ngrids_align_down < ngrids) {
                         size_t Ngrids = ngrids;
@@ -1043,13 +1083,16 @@ void VXCdcontract_rho_sparse(double *rho, double *bra, double *ket,
                 rhobufs[0] = rho;
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+                int save = mkl_set_num_threads_local(1);
+#endif
                 size_t Ngrids = ngrids;
                 size_t i_addr;
                 int ig0, row, ish, i0, i1, n, i;
                 double s8[BLKSIZE];
                 int thread_id = omp_get_thread_num();
                 if (thread_id > 0) {
-                        rhobufs[thread_id] = malloc(sizeof(double) * ngrids);
+                        rhobufs[thread_id] = pyscf_malloc(sizeof(double) * ngrids);
                 }
                 double *rho_priv = rhobufs[thread_id];
                 NPdset0(rho_priv, ngrids);
@@ -1093,8 +1136,11 @@ void VXCdcontract_rho_sparse(double *rho, double *bra, double *ket,
                 }
                 NPomp_dsum_reduce_inplace(rhobufs, ngrids);
                 if (thread_id > 0) {
-                        free(rho_priv);
+                        pyscf_free(rho_priv);
                 }
+#ifdef PYSCF_USE_MKL
+                mkl_set_num_threads_local(save);
+#endif
 }
         }  // if (nao * 2 < ngrids)
 }

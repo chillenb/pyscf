@@ -28,7 +28,7 @@
 #include "config.h"
 #include "vhf/fblas.h"
 #include "ragf2.h"
-
+#include "np_helper/np_helper.h"
 
 
 /*
@@ -68,15 +68,19 @@ void AGF2uee_vv_vev_islice(double *xija,
 
 #pragma omp parallel
 {
-    double *eja = calloc(noa*nva, sizeof(double));
-    double *eJA = calloc(nob*nvb, sizeof(double));
-    double *xia = calloc(nmo*noa*nva, sizeof(double));
-    double *xja = calloc(nmo*noa*nva, sizeof(double));
-    double *xJA = calloc(nmo*nob*nvb, sizeof(double));
-    double *exJA = calloc(nmo*nob*nvb, sizeof(double));
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
 
-    double *vv_priv = calloc(nmo*nmo, sizeof(double));
-    double *vev_priv = calloc(nmo*nmo, sizeof(double));
+    double *eja = pyscf_calloc(noa*nva, sizeof(double));
+    double *eJA = pyscf_calloc(nob*nvb, sizeof(double));
+    double *xia = pyscf_calloc(nmo*noa*nva, sizeof(double));
+    double *xja = pyscf_calloc(nmo*noa*nva, sizeof(double));
+    double *xJA = pyscf_calloc(nmo*nob*nvb, sizeof(double));
+    double *exJA = pyscf_calloc(nmo*nob*nvb, sizeof(double));
+
+    double *vv_priv = pyscf_calloc(nmo*nmo, sizeof(double));
+    double *vev_priv = pyscf_calloc(nmo*nmo, sizeof(double));
 
     int i;
 
@@ -119,12 +123,12 @@ void AGF2uee_vv_vev_islice(double *xija,
         dgemm_(&TRANS_T, &TRANS_N, &nmo, &nmo, &nJA, &os_factor, xJA, &nJA, exJA, &nJA, &D1, vev_priv, &nmo);
     }
 
-    free(eja);
-    free(eJA);
-    free(xia);
-    free(xja);
-    free(xJA);
-    free(exJA);
+    pyscf_free(eja);
+    pyscf_free(eJA);
+    pyscf_free(xia);
+    pyscf_free(xja);
+    pyscf_free(xJA);
+    pyscf_free(exJA);
 
 #pragma omp critical
     for (i = 0; i < (nmo*nmo); i++) {
@@ -132,8 +136,12 @@ void AGF2uee_vv_vev_islice(double *xija,
         vev[i] += vev_priv[i];
     }
 
-    free(vv_priv);
-    free(vev_priv);
+    pyscf_free(vv_priv);
+    pyscf_free(vev_priv);
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -175,17 +183,21 @@ void AGF2udf_vv_vev_islice(double *qxi,
 
 #pragma omp parallel
 {
-    double *qa = calloc(naux*nva, sizeof(double));
-    double *qx = calloc(naux*nmo, sizeof(double));
-    double *eja = calloc(noa*nva, sizeof(double));
-    double *eJA = calloc(nob*nvb, sizeof(double));
-    double *xia = calloc(nmo*noa*nva, sizeof(double));
-    double *xja = calloc(nmo*noa*nva, sizeof(double));
-    double *xJA = calloc(nmo*nob*nvb, sizeof(double));
-    double *exJA = calloc(nmo*nob*nvb, sizeof(double));
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
 
-    double *vv_priv = calloc(nmo*nmo, sizeof(double));
-    double *vev_priv = calloc(nmo*nmo, sizeof(double));
+    double *qa = pyscf_calloc(naux*nva, sizeof(double));
+    double *qx = pyscf_calloc(naux*nmo, sizeof(double));
+    double *eja = pyscf_calloc(noa*nva, sizeof(double));
+    double *eJA = pyscf_calloc(nob*nvb, sizeof(double));
+    double *xia = pyscf_calloc(nmo*noa*nva, sizeof(double));
+    double *xja = pyscf_calloc(nmo*noa*nva, sizeof(double));
+    double *xJA = pyscf_calloc(nmo*nob*nvb, sizeof(double));
+    double *exJA = pyscf_calloc(nmo*nob*nvb, sizeof(double));
+
+    double *vv_priv = pyscf_calloc(nmo*nmo, sizeof(double));
+    double *vev_priv = pyscf_calloc(nmo*nmo, sizeof(double));
 
     int i;
 
@@ -234,14 +246,14 @@ void AGF2udf_vv_vev_islice(double *qxi,
         dgemm_(&TRANS_T, &TRANS_N, &nmo, &nmo, &nJA, &os_factor, xJA, &nJA, exJA, &nJA, &D1, vev_priv, &nmo);
     }
 
-    free(qa);
-    free(qx);
-    free(eja);
-    free(eJA);
-    free(xia);
-    free(xja);
-    free(xJA);
-    free(exJA);
+    pyscf_free(qa);
+    pyscf_free(qx);
+    pyscf_free(eja);
+    pyscf_free(eJA);
+    pyscf_free(xia);
+    pyscf_free(xja);
+    pyscf_free(xJA);
+    pyscf_free(exJA);
 
 #pragma omp critical
     for (i = 0; i < (nmo*nmo); i++) {
@@ -249,8 +261,12 @@ void AGF2udf_vv_vev_islice(double *qxi,
         vev[i] += vev_priv[i];
     }
 
-    free(vv_priv);
-    free(vev_priv);
+    pyscf_free(vv_priv);
+    pyscf_free(vev_priv);
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -287,22 +303,26 @@ void AGF2udf_vv_vev_islice_lowmem(double *qxi,
 
 #pragma omp parallel
 {
-    double *qx_i = calloc(naux*nmo, sizeof(double));
-    double *qx_j = calloc(naux*nmo, sizeof(double));
-    double *qa_i = calloc(naux*nva, sizeof(double));
-    double *qa_j = calloc(naux*nva, sizeof(double));
-    double *qA_i = calloc(naux*nvb, sizeof(double));
-    double *qA_j = calloc(naux*nvb, sizeof(double));
-    double *xa_i = calloc(nmo*nva, sizeof(double));
-    double *xa_j = calloc(nmo*nva, sizeof(double));
-    double *xA_i = calloc(nmo*nvb, sizeof(double));
-    double *xA_j = calloc(nmo*nvb, sizeof(double));
-    double *ea = calloc(nva, sizeof(double));
-    double *eA = calloc(nvb, sizeof(double));
-    double *exA_i = calloc(nmo*nvb, sizeof(double));
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
 
-    double *vv_priv = calloc(nmo*nmo, sizeof(double));
-    double *vev_priv = calloc(nmo*nmo, sizeof(double));
+    double *qx_i = pyscf_calloc(naux*nmo, sizeof(double));
+    double *qx_j = pyscf_calloc(naux*nmo, sizeof(double));
+    double *qa_i = pyscf_calloc(naux*nva, sizeof(double));
+    double *qa_j = pyscf_calloc(naux*nva, sizeof(double));
+    double *qA_i = pyscf_calloc(naux*nvb, sizeof(double));
+    double *qA_j = pyscf_calloc(naux*nvb, sizeof(double));
+    double *xa_i = pyscf_calloc(nmo*nva, sizeof(double));
+    double *xa_j = pyscf_calloc(nmo*nva, sizeof(double));
+    double *xA_i = pyscf_calloc(nmo*nvb, sizeof(double));
+    double *xA_j = pyscf_calloc(nmo*nvb, sizeof(double));
+    double *ea = pyscf_calloc(nva, sizeof(double));
+    double *eA = pyscf_calloc(nvb, sizeof(double));
+    double *exA_i = pyscf_calloc(nmo*nvb, sizeof(double));
+
+    double *vv_priv = pyscf_calloc(nmo*nmo, sizeof(double));
+    double *vev_priv = pyscf_calloc(nmo*nmo, sizeof(double));
 
     bool do_os, do_ss;
     int i, j, ij;
@@ -373,19 +393,19 @@ void AGF2udf_vv_vev_islice_lowmem(double *qxi,
         }
     }
 
-    free(qx_i);
-    free(qx_j);
-    free(qa_i);
-    free(qa_j);
-    free(qA_i);
-    free(qA_j);
-    free(xa_i);
-    free(xa_j);
-    free(xA_i);
-    free(xA_j);
-    free(ea);
-    free(eA);
-    free(exA_i);
+    pyscf_free(qx_i);
+    pyscf_free(qx_j);
+    pyscf_free(qa_i);
+    pyscf_free(qa_j);
+    pyscf_free(qA_i);
+    pyscf_free(qA_j);
+    pyscf_free(xa_i);
+    pyscf_free(xa_j);
+    pyscf_free(xA_i);
+    pyscf_free(xA_j);
+    pyscf_free(ea);
+    pyscf_free(eA);
+    pyscf_free(exA_i);
 
 #pragma omp critical
     for (i = 0; i < (nmo*nmo); i++) {
@@ -393,7 +413,11 @@ void AGF2udf_vv_vev_islice_lowmem(double *qxi,
         vev[i] += vev_priv[i];
     }
 
-    free(vv_priv);
-    free(vev_priv);
+    pyscf_free(vv_priv);
+    pyscf_free(vev_priv);
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
 }

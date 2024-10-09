@@ -33,7 +33,8 @@ void VXCgen_grid(double *out, double *coords, double *atm_coords,
         const size_t Ngrids = ngrids;
         int i, j;
         double dx, dy, dz;
-        double *atom_dist = malloc(sizeof(double) * natm*natm);
+        double *atom_dist = pyscf_malloc(sizeof(double) * natm*natm);
+
         for (i = 0; i < natm; i++) {
                 for (j = 0; j < i; j++) {
                         dx = atm_coords[i*3+0] - atm_coords[j*3+0];
@@ -45,7 +46,11 @@ void VXCgen_grid(double *out, double *coords, double *atm_coords,
 
 #pragma omp parallel private(i, j, dx, dy, dz)
 {
-        double *_buf = malloc(sizeof(double) * ((natm*2+1)*GRIDS_BLOCK + ALIGNMENT));
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        double *_buf = pyscf_malloc(sizeof(double) * ((natm*2+1)*GRIDS_BLOCK + ALIGNMENT));
         double *buf = (double *)((uintptr_t)(_buf + ALIGNMENT - 1) & (-(uintptr_t)(ALIGNMENT*8)));
         double *g = buf + natm * GRIDS_BLOCK;
         double *grid_dist = g + GRIDS_BLOCK;
@@ -95,8 +100,12 @@ void VXCgen_grid(double *out, double *coords, double *atm_coords,
                         }
                 }
         }
-        free(_buf);
+        pyscf_free(_buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(atom_dist);
+        pyscf_free(atom_dist);
 }
 

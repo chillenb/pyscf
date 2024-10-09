@@ -72,24 +72,24 @@ void get_cart2sph_coeff(double** contr_coeff, double** gto_norm,
     int ptr_exp, ptr_coeff;
     int ish, ipgf, ic, i, j;
 
-    double **c2s = (double**) malloc(sizeof(double*) * (lmax+1));
+    double **c2s = (double**) pyscf_malloc(sizeof(double*) * (lmax+1));
     for (l = 0; l <= lmax; l++) {
         ncart = _LEN_CART[l];
         if (l <= 1 || cart == 1) {
-            c2s[l] = (double*) calloc(ncart*ncart, sizeof(double));
+            c2s[l] = (double*) pyscf_calloc(ncart*ncart, sizeof(double));
             for (i = 0; i < ncart; i++) {
                 c2s[l][i*ncart + i] = 1;
             }
         }
         else {
             nsph = 2*l + 1;
-            c2s[l] = (double*) calloc(nsph*ncart, sizeof(double));
-            double* gcart = (double*) calloc(ncart*ncart, sizeof(double));
+            c2s[l] = (double*) pyscf_calloc(nsph*ncart, sizeof(double));
+            double* gcart = (double*) pyscf_calloc(ncart*ncart, sizeof(double));
             for (i = 0; i < ncart; i++) {
                 gcart[i*ncart + i] = 1;
             }
             CINTc2s_ket_sph(c2s[l], ncart, gcart, l);
-            free(gcart);
+            pyscf_free(gcart);
         }
     }
 
@@ -106,19 +106,19 @@ void get_cart2sph_coeff(double** contr_coeff, double** gto_norm,
         nctr = bas[NCTR_OF+ish*BAS_SLOTS];
 
         ptr_exp = bas[PTR_EXP+ish*BAS_SLOTS];
-        gto_norm[ish] = (double*) malloc(sizeof(double) * nprim);
+        gto_norm[ish] = (double*) pyscf_malloc(sizeof(double) * nprim);
         for (ipgf = 0; ipgf < nprim; ipgf++) {
             gto_norm[ish][ipgf] = CINTgto_norm(l, env[ptr_exp+ipgf]);
         }
 
         ptr_coeff = bas[PTR_COEFF+ish*BAS_SLOTS];
-        double *buf = (double*) calloc(nctr*nprim, sizeof(double));
+        double *buf = (double*) pyscf_calloc(nctr*nprim, sizeof(double));
         for (ipgf = 0; ipgf < nprim; ipgf++) {
             double inv_norm = 1./gto_norm[ish][ipgf];
             daxpy_(&nctr, &inv_norm, env+ptr_coeff+ipgf, &nprim, buf+ipgf, &nprim);
         }
 
-        contr_coeff[ish] = (double*) malloc(sizeof(double) * nprim*ncart*nctr*nsph);
+        contr_coeff[ish] = (double*) pyscf_malloc(sizeof(double) * nprim*ncart*nctr*nsph);
         double* ptr_contr_coeff = contr_coeff[ish];
         for (ipgf = 0; ipgf < nprim; ipgf++) {
             for (i = 0; i < ncart; i++) {
@@ -130,14 +130,15 @@ void get_cart2sph_coeff(double** contr_coeff, double** gto_norm,
                 }
             }
         }
-        free(buf);
+        pyscf_free(buf);
     }
+
 }
 
     for (l = 0; l <= lmax; l++) {
-        free(c2s[l]);
+        pyscf_free(c2s[l]);
     }
-    free(c2s);
+    pyscf_free(c2s);
 }
 
 
@@ -146,14 +147,14 @@ void del_cart2sph_coeff(double** contr_coeff, double** gto_norm, int ish0, int i
     int ish;
     for (ish = ish0; ish < ish1; ish++) {
         if (contr_coeff[ish]) {
-            free(contr_coeff[ish]);
+            pyscf_free(contr_coeff[ish]);
         }
         if (gto_norm[ish]) {
-            free(gto_norm[ish]);
+            pyscf_free(gto_norm[ish]);
         }
     }
-    free(contr_coeff);
-    free(gto_norm);
+    pyscf_free(contr_coeff);
+    pyscf_free(gto_norm);
 }
 
 

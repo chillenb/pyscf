@@ -18,6 +18,10 @@
 
 #include <complex.h>
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define BLOCK_DIM    104
 
 #define HERMITIAN    1
@@ -31,6 +35,20 @@
         for (j0 = 0; j0 < n; j0+=BLOCK_DIM) \
                 for (I = 0, j1 = MIN(j0+BLOCK_DIM, n); I < j1; I++) \
                         for (J = MAX(I,j0); J < j1; J++)
+
+#ifdef PYSCF_USE_MKL
+#define pyscf_malloc(SZ) mkl_malloc((SZ), 64)
+#define pyscf_free mkl_free
+#define pyscf_calloc(n, SZ) mkl_calloc((n), (SZ), 64)
+#define pyscf_realloc mkl_realloc
+
+#else
+
+#define pyscf_malloc malloc
+#define pyscf_free free
+#define pyscf_calloc calloc
+#define pyscf_realloc realloc
+#endif
 
 void NPdsymm_triu(int n, double *mat, int hermi);
 void NPzhermi_triu(int n, double complex *mat, int hermi);
@@ -62,9 +80,16 @@ void NPzset0(double complex *p, const size_t n);
 void NPdcopy(double *out, const double *in, const size_t n);
 void NPzcopy(double complex *out, const double complex *in, const size_t n);
 
+void NPomp_dset0(double *p, const size_t n);
+void NPomp_zset0(double complex *p, const size_t n);
+void NPomp_dmul(double *A, double *B, double *out, size_t n);
+void NPomp_zmul(double complex *A, double complex *B, double complex *out, size_t n);
+
 void NPdgemm(const char trans_a, const char trans_b,
              const int m, const int n, const int k,
              const int lda, const int ldb, const int ldc,
              const int offseta, const int offsetb, const int offsetc,
              double *a, double *b, double *c,
              const double alpha, const double beta);
+
+int pyscf_has_mkl(void);

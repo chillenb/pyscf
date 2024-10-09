@@ -80,10 +80,14 @@ void GTOgrids_int2c(int (*intor)(), double *mat, int comp, int hermi,
         const int dims[] = {naoi, naoj, ngrids};
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         size_t ij;
         int ish, jsh, i0, j0, grid0, grid1;
         int shls[4];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
 #pragma omp for schedule(dynamic, 1)
         for (ij = 0; ij < nish*njsh; ij++) {
                 ish = ij / njsh;
@@ -107,7 +111,7 @@ void GTOgrids_int2c(int (*intor)(), double *mat, int comp, int hermi,
                                  atm, natm, bas, nbas, env, opt, cache);
                 }
         }
-        free(cache);
+        pyscf_free(cache);
 
         if (hermi != PLAIN) { // lower triangle of F-array
                 size_t ic, i, j, ig;
@@ -137,6 +141,10 @@ void GTOgrids_int2c(int (*intor)(), double *mat, int comp, int hermi,
                         }
                 }
         }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -158,10 +166,14 @@ void GTOgrids_int2c_spinor(int (*intor)(), double complex *mat, int comp, int he
         int dims[] = {naoi, naoj, ngrids};
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         size_t ij;
         int ish, jsh, i0, j0, grid0, grid1;
         int shls[4];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
 #pragma omp for schedule(dynamic, 1)
         for (ij = 0; ij < nish*njsh; ij++) {
                 ish = ij / njsh;
@@ -184,7 +196,7 @@ void GTOgrids_int2c_spinor(int (*intor)(), double complex *mat, int comp, int he
                                  atm, natm, bas, nbas, env, opt, cache);
                 }
         }
-        free(cache);
+        pyscf_free(cache);
 
         if (hermi != PLAIN) { // lower triangle of F-array
                 size_t ic, i, j, ig;
@@ -218,5 +230,9 @@ void GTOgrids_int2c_spinor(int (*intor)(), double complex *mat, int comp, int he
                         }
                 }
         }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }

@@ -26,6 +26,11 @@
 #include <assert.h>
 #include <xc.h>
 #include "config.h"
+
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define MAX(X,Y) ((X) > (Y) ? (X) : (Y))
 #define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
 #define MAX_THREADS     256
@@ -877,6 +882,7 @@ static int xc_nvar7_offsets[] = {0, 1, 8, 36, 120, 330};
 static void axpy(double *dst, double *src, double fac,
                  int np, int nsrc)
 {
+#ifndef PYSCF_USE_MKL
         int i, j;
         for (j = 0; j < nsrc; j++) {
                 #pragma omp parallel for schedule(static)
@@ -884,6 +890,14 @@ static void axpy(double *dst, double *src, double fac,
                         dst[j*np+i] += fac * src[i*nsrc+j];
                 }
         }
+#else
+        mkl_domatadd(
+                'R', 'N', 'T', nsrc, np,
+                1.0, dst, np,
+                fac, src, nsrc,
+                dst, np
+        );
+#endif
 }
 static int vseg1[] = {2, 3, 2};
 static int fseg1[] = {3, 6, 6, 4, 6, 3};
@@ -983,6 +997,10 @@ void LIBXC_eval_xc(int nfn, int *fn_id, double *fac, double *omega,
         int offsets[MAX_THREADS+1];
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int iblk = omp_get_thread_num();
         int nblk = omp_get_num_threads();
         assert(nblk <= MAX_THREADS);
@@ -1005,6 +1023,10 @@ void LIBXC_eval_xc(int nfn, int *fn_id, double *fac, double *omega,
         double *rho_priv = malloc(sizeof(double) * blksize * 7);
         rhobufs[iblk] = rho_priv;
         _eval_rho(rho_priv, rho_u+ioff, spin, nvar, blksize, np);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 
         int nspin = spin + 1;

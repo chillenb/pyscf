@@ -25,8 +25,11 @@
 //#include "omp.h"
 #include "config.h"
 #include "vhf/fblas.h"
+#include "np_helper/np_helper.h"
 
-
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
 
 /*
  *  b_x = alpha * a_x + beta * b_x
@@ -37,12 +40,16 @@ void AGF2sum_inplace(double *a,
                      double alpha,
                      double beta)
 {
+#ifndef PYSCF_USE_MKL
     int i;
 
     for (i = 0; i < x; i++) {
         b[i] *= beta;
         b[i] += alpha * a[i];
     }
+#else
+    cblas_daxpby(x, alpha, a, 1, beta, b, 1);
+#endif
 }
 
 
@@ -53,11 +60,15 @@ void AGF2prod_inplace(double *a,
                       double *b,
                       int x)
 {
+#ifndef PYSCF_USE_MKL
     int i;
 
     for (i = 0; i < x; i++) {
         b[i] *= a[i];
     }
+#else
+    vdMul(x, a, b, b);
+#endif
 }
 
 
@@ -69,11 +80,15 @@ void AGF2prod_outplace(double *a,
                        int x,
                        double *c)
 {
+#ifndef PYSCF_USE_MKL
     int i;
 
     for (i = 0; i < x; i++) {
         c[i] = a[i] * b[i];
     }
+#else
+    vdMul(x, a, b, c);
+#endif
 }
 
 
@@ -87,6 +102,7 @@ void AGF2slice_0i2(double *a,
                    int idx,
                    double *b)
 {
+#ifndef PYSCF_USE_MKL
     double *pa, *pb;
     int i, k;
 
@@ -97,6 +113,13 @@ void AGF2slice_0i2(double *a,
             pb[k] = pa[k];
         }
     }
+#else
+    mkl_domatcopy(
+        'R', 'N', x, z, 1.0,
+        a + idx*z, y*z,
+        b, z
+    );
+#endif
 }
 
 
@@ -110,6 +133,7 @@ void AGF2slice_01i(double *a,
                    int idx,
                    double *b)
 {
+#ifndef PYSCF_USE_MKL
     double *pa, *pb;
     int i, j;
 
@@ -120,6 +144,13 @@ void AGF2slice_01i(double *a,
             pb[j] = pa[j*z];
         }
     }
+#else
+    mkl_domatcopy2(
+        'R', 'N', x, y, 1.0,
+        a + idx, y*z, z,
+        b, y, 1
+    );
+#endif
 }
 
 
@@ -212,12 +243,16 @@ void AGF2ee_vv_vev_islice(double *xija,
 
 #pragma omp parallel
 {
-    double *eja = calloc(nocc*nvir, sizeof(double));
-    double *xia = calloc(nmo*nocc*nvir, sizeof(double));
-    double *xja = calloc(nmo*nocc*nvir, sizeof(double));
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
 
-    double *vv_priv = calloc(nmo*nmo, sizeof(double));
-    double *vev_priv = calloc(nmo*nmo, sizeof(double));
+    double *eja = pyscf_calloc(nocc*nvir, sizeof(double));
+    double *xia = pyscf_calloc(nmo*nocc*nvir, sizeof(double));
+    double *xja = pyscf_calloc(nmo*nocc*nvir, sizeof(double));
+
+    double *vv_priv = pyscf_calloc(nmo*nmo, sizeof(double));
+    double *vev_priv = pyscf_calloc(nmo*nmo, sizeof(double));
 
     int i;
 
@@ -245,9 +280,9 @@ void AGF2ee_vv_vev_islice(double *xija,
         dgemm_(&TRANS_T, &TRANS_N, &nmo, &nmo, &nja, &D1, xia, &nja, xja, &nja, &D1, vev_priv, &nmo);
     }
 
-    free(eja);
-    free(xia);
-    free(xja);
+    pyscf_free(eja);
+    pyscf_free(xia);
+    pyscf_free(xja);
 
 #pragma omp critical
     for (i = 0; i < (nmo*nmo); i++) {
@@ -255,8 +290,12 @@ void AGF2ee_vv_vev_islice(double *xija,
         vev[i] += vev_priv[i];
     }
 
-    free(vv_priv);
-    free(vev_priv);
+    pyscf_free(vv_priv);
+    pyscf_free(vev_priv);
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -294,14 +333,18 @@ void AGF2df_vv_vev_islice(double *qxi,
 
 #pragma omp parallel
 {
-    double *qa = calloc(naux*nvir, sizeof(double));
-    double *qx = calloc(naux*nmo, sizeof(double));
-    double *eja = calloc(nocc*nvir, sizeof(double));
-    double *xia = calloc(nmo*nocc*nvir, sizeof(double));
-    double *xja = calloc(nmo*nocc*nvir, sizeof(double));
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
 
-    double *vv_priv = calloc(nmo*nmo, sizeof(double));
-    double *vev_priv = calloc(nmo*nmo, sizeof(double));
+    double *qa = pyscf_calloc(naux*nvir, sizeof(double));
+    double *qx = pyscf_calloc(naux*nmo, sizeof(double));
+    double *eja = pyscf_calloc(nocc*nvir, sizeof(double));
+    double *xia = pyscf_calloc(nmo*nocc*nvir, sizeof(double));
+    double *xja = pyscf_calloc(nmo*nocc*nvir, sizeof(double));
+
+    double *vv_priv = pyscf_calloc(nmo*nmo, sizeof(double));
+    double *vev_priv = pyscf_calloc(nmo*nmo, sizeof(double));
 
     int i;
 
@@ -336,11 +379,11 @@ void AGF2df_vv_vev_islice(double *qxi,
         dgemm_(&TRANS_T, &TRANS_N, &nmo, &nmo, &nja, &D1, xia, &nja, xja, &nja, &D1, vev_priv, &nmo);
     }
 
-    free(qa);
-    free(qx);
-    free(eja);
-    free(xia);
-    free(xja);
+    pyscf_free(qa);
+    pyscf_free(qx);
+    pyscf_free(eja);
+    pyscf_free(xia);
+    pyscf_free(xja);
 
 #pragma omp critical
     for (i = 0; i < (nmo*nmo); i++) {
@@ -348,8 +391,12 @@ void AGF2df_vv_vev_islice(double *qxi,
         vev[i] += vev_priv[i];
     }
 
-    free(vv_priv);
-    free(vev_priv);
+    pyscf_free(vv_priv);
+    pyscf_free(vev_priv);
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -384,14 +431,14 @@ void AGF2df_vv_vev_islice_lowmem(double *qxi,
     
 //#pragma omp parallel
 //{
-//    double *xj = calloc(nmo*nocc, sizeof(double));
-//    double *xi = calloc(nmo*nocc, sizeof(double));
-//    double *qx = calloc(naux*nmo, sizeof(double));
-//    double *qj = calloc(naux*nocc, sizeof(double));
-//    double *ej = calloc(nocc, sizeof(double));
+//    double *xj = pyscf_calloc(nmo*nocc, sizeof(double));
+//    double *xi = pyscf_calloc(nmo*nocc, sizeof(double));
+//    double *qx = pyscf_calloc(naux*nmo, sizeof(double));
+//    double *qj = pyscf_calloc(naux*nocc, sizeof(double));
+//    double *ej = pyscf_calloc(nocc, sizeof(double));
 //
-//    double *vv_priv = calloc(nmo*nmo, sizeof(double));
-//    double *vev_priv = calloc(nmo*nmo, sizeof(double));
+//    double *vv_priv = pyscf_calloc(nmo*nmo, sizeof(double));
+//    double *vev_priv = pyscf_calloc(nmo*nmo, sizeof(double));
 //
 //    int i, a, ia;
 //
@@ -428,24 +475,27 @@ void AGF2df_vv_vev_islice_lowmem(double *qxi,
 //        dgemm_(&TRANS_T, &TRANS_N, &nmo, &nmo, &nocc, &D1, xi, &nocc, xj, &nocc, &D1, vev_priv, &nmo);
 //    }
 //
-//    free(xj);
-//    free(xi);
-//    free(qx);
-//    free(qj);
-//    free(ej);
+//    pyscf_free(xj);
+//    pyscf_free(xi);
+//    pyscf_free(qx);
+//    pyscf_free(qj);
+//    pyscf_free(ej);
 
 #pragma omp parallel
 {
-    double *qx_i = calloc(naux*nmo, sizeof(double));
-    double *qx_j = calloc(naux*nmo, sizeof(double));
-    double *qa_i = calloc(naux*nvir, sizeof(double));
-    double *qa_j = calloc(naux*nvir, sizeof(double));
-    double *xa_i = calloc(nmo*nvir, sizeof(double));
-    double *xa_j = calloc(nmo*nvir, sizeof(double));
-    double *ea = calloc(nvir, sizeof(double));
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+    double *qx_i = pyscf_calloc(naux*nmo, sizeof(double));
+    double *qx_j = pyscf_calloc(naux*nmo, sizeof(double));
+    double *qa_i = pyscf_calloc(naux*nvir, sizeof(double));
+    double *qa_j = pyscf_calloc(naux*nvir, sizeof(double));
+    double *xa_i = pyscf_calloc(nmo*nvir, sizeof(double));
+    double *xa_j = pyscf_calloc(nmo*nvir, sizeof(double));
+    double *ea = pyscf_calloc(nvir, sizeof(double));
 
-    double *vv_priv = calloc(nmo*nmo, sizeof(double));
-    double *vev_priv = calloc(nmo*nmo, sizeof(double));
+    double *vv_priv = pyscf_calloc(nmo*nmo, sizeof(double));
+    double *vev_priv = pyscf_calloc(nmo*nmo, sizeof(double));
 
     int i, j, ij;
 
@@ -488,13 +538,13 @@ void AGF2df_vv_vev_islice_lowmem(double *qxi,
         dgemm_(&TRANS_T, &TRANS_N, &nmo, &nmo, &nvir, &D1, xa_j, &nvir, xa_i, &nvir, &D1, vev_priv, &nmo);
     }
 
-    free(qx_i);
-    free(qx_j);
-    free(qa_i);
-    free(qa_j);
-    free(xa_i);
-    free(xa_j);
-    free(ea);
+    pyscf_free(qx_i);
+    pyscf_free(qx_j);
+    pyscf_free(qa_i);
+    pyscf_free(qa_j);
+    pyscf_free(xa_i);
+    pyscf_free(xa_j);
+    pyscf_free(ea);
 
 #pragma omp critical
     for (i = 0; i < (nmo*nmo); i++) {
@@ -502,7 +552,11 @@ void AGF2df_vv_vev_islice_lowmem(double *qxi,
         vev[i] += vev_priv[i];
     }
 
-    free(vv_priv);
-    free(vev_priv);
+    pyscf_free(vv_priv);
+    pyscf_free(vev_priv);
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
 }

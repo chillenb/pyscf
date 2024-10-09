@@ -23,6 +23,12 @@
 #include "config.h"
 #include "grid_ao_drv.h"
 
+#include "np_helper/np_helper.h"
+
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define MIN(X,Y)        ((X)<(Y)?(X):(Y))
 #define MAX(X,Y)        ((X)>(Y)?(X):(Y))
 
@@ -46,7 +52,7 @@ void GTO_screen_index(uint8_t *screen_index, int nbins, double cutoff,
         double *coordx = coords;
         double *coordy = coords + ngrids;
         double *coordz = coords + ngrids * 2;
-        double *rr = malloc(sizeof(double) * blksize);
+        double *rr = pyscf_malloc(sizeof(double) * blksize);
 #pragma omp for nowait schedule(static)
         for (bas_id = 0; bas_id < nbas; bas_id++) {
                 np = bas[NPRIM_OF+bas_id*BAS_SLOTS];
@@ -108,7 +114,7 @@ void GTO_screen_index(uint8_t *screen_index, int nbins, double cutoff,
                         }
                 }
         }
-        free(rr);
+        pyscf_free(rr);
 }
 }
 
@@ -160,10 +166,17 @@ int GTOprim_exp(double *eprim, double *coord, double *alpha, double *coeff,
         }
 
         for (j = 0; j < nprim; j++) {
+#ifndef PYSCF_USE_MKL
                 for (i = 0; i < ngrids; i++) {
                         arr = alpha[j] * rr[i];
                         eprim[j*BLKSIZE+i] = exp(-arr) * fac;
                 }
+#else
+                double alphaj = -alpha[j];
+                vdMulI(ngrids, &alphaj, 0, rr, 1, eprim+j*BLKSIZE, 1);
+                vdExp(ngrids, eprim+j*BLKSIZE, eprim+j*BLKSIZE);
+                vdMulI(ngrids, &fac, 0, eprim+j*BLKSIZE, 1, eprim+j*BLKSIZE, 1);
+#endif
         }
         return 1;
 }
@@ -191,22 +204,31 @@ static void _fill_grid2atm(double *grid2atm, double *coord, size_t bgrids, size_
 
 static void _dset0(double *out, size_t odim, size_t bgrids, int counts)
 {
+#ifndef PYSCF_USE_MKL
         size_t i, j;
         for (i = 0; i < counts; i++) {
                 for (j = 0; j < bgrids; j++) {
                         out[i*odim+j] = 0;
                 }
         }
+#else
+        LAPACKE_dlaset(LAPACK_ROW_MAJOR, 'A', counts, bgrids, 0.0, 0.0, out, odim);
+#endif
 }
 
 static void _zset0(double complex *out, size_t odim, size_t bgrids, int counts)
 {
+#ifndef PYSCF_USE_MKL
         size_t i, j;
         for (i = 0; i < counts; i++) {
                 for (j = 0; j < bgrids; j++) {
                         out[i*odim+j] = 0;
                 }
         }
+#else
+        MKL_Complex16 zero = {0.0, 0.0};
+        LAPACKE_zlaset(LAPACK_ROW_MAJOR, 'A', counts, bgrids, zero, zero, (MKL_Complex16*) out, odim);
+#endif
 }
 
 void GTOeval_sph_iter(FPtr_eval feval,  FPtr_exp fexp, double fac,
@@ -414,13 +436,17 @@ void GTOeval_loop(void (*fiter)(), FPtr_eval feval, FPtr_exp fexp, double fac,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         const int sh0 = shls_slice[0];
         const int sh1 = shls_slice[1];
         const size_t nao = ao_loc[sh1] - ao_loc[sh0];
         int ip, ib, k, iloc, ish;
         size_t aoff, bgrids;
         int ncart = NCTR_CART * param[TENSOR] * param[POS_E1];
-        double *buf = malloc(sizeof(double) * BLKSIZE*(NPRIMAX*2+ncart+1));
+        double *buf = pyscf_malloc(sizeof(double) * BLKSIZE*(NPRIMAX*2+ncart+1));
 #pragma omp for schedule(dynamic, 4)
         for (k = 0; k < nblk*nshblk; k++) {
                 iloc = k / nblk;
@@ -434,7 +460,11 @@ void GTOeval_loop(void (*fiter)(), FPtr_eval feval, FPtr_exp fexp, double fac,
                          coord+ip, non0table+ib*nbas,
                          atm, natm, bas, nbas, env);
         }
-        free(buf);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -470,13 +500,17 @@ void GTOeval_spinor_drv(FPtr_eval feval, FPtr_exp fexp, void (*c2s)(), double fa
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         const int sh0 = shls_slice[0];
         const int sh1 = shls_slice[1];
         const size_t nao = ao_loc[sh1] - ao_loc[sh0];
         int ip, ib, k, iloc, ish;
         size_t aoff, bgrids;
         int ncart = NCTR_CART * param[TENSOR] * param[POS_E1];
-        double *buf = malloc(sizeof(double) * BLKSIZE*(NPRIMAX*2+ncart+1));
+        double *buf = pyscf_malloc(sizeof(double) * BLKSIZE*(NPRIMAX*2+ncart+1));
 #pragma omp for schedule(dynamic, 4)
         for (k = 0; k < nblk*nshblk; k++) {
                 iloc = k / nblk;
@@ -491,6 +525,10 @@ void GTOeval_spinor_drv(FPtr_eval feval, FPtr_exp fexp, void (*c2s)(), double fa
                                     coord+ip, non0table+ib*nbas,
                                     atm, natm, bas, nbas, env);
         }
-        free(buf);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }

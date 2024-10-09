@@ -31,6 +31,10 @@
 #include "gto/grid_ao_drv.h"
 #include "vhf/fblas.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #ifndef __USE_ISOC99
 #define rint(x) (int)round(x)
 #endif
@@ -1606,14 +1610,18 @@ void NUMINT_fill2c(int (*eval_ints)(), double *weights, double *F_mat,
         }
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         size_t ncij = comp * naoi * naoj;
         size_t nijsh = nish * njsh;
         size_t dims[] = {naoi, naoj};
         size_t ijm;
         int ish, jsh, ij, m, i0, j0;
         int shls[2];
-        double *cache = malloc(sizeof(double) * cache_size);
-        double *env_loc = malloc(sizeof(double)*nenv);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
+        double *env_loc = pyscf_malloc(sizeof(double)*nenv);
         NPdcopy(env_loc, env, nenv);
         int ptrxyz;
 #pragma omp for schedule(dynamic)
@@ -1642,8 +1650,12 @@ void NUMINT_fill2c(int (*eval_ints)(), double *weights, double *F_mat,
                             offset, submesh, mesh,
                             shls, atm, bas, env_loc, cache);
         }
-        free(cache);
-        free(env_loc);
+        pyscf_free(cache);
+        pyscf_free(env_loc);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -2623,14 +2635,18 @@ void NUMINT_rho_drv(void (*eval_rho)(), double *rho, double *F_dm,
         double *rhobufs[MAX_THREADS];
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         size_t ncij = naoi * naoj;
         size_t nijsh = nish * njsh;
         size_t dims[] = {naoi, naoj};
         size_t ijm;
         int ish, jsh, ij, m, i0, j0;
         int shls[2];
-        double *cache = malloc(sizeof(double) * cache_size);
-        double *env_loc = malloc(sizeof(double)*nenv);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
+        double *env_loc = pyscf_malloc(sizeof(double)*nenv);
         NPdcopy(env_loc, env, nenv);
         int ptrxyz;
         int thread_id = omp_get_thread_num();
@@ -2638,7 +2654,7 @@ void NUMINT_rho_drv(void (*eval_rho)(), double *rho, double *F_dm,
         if (thread_id == 0) {
                 rho_priv = rho;
         } else {
-                rho_priv = calloc(comp*ngrids, sizeof(double));
+                rho_priv = pyscf_calloc(comp*ngrids, sizeof(double));
         }
         rhobufs[thread_id] = rho_priv;
         if (hermi == 1) {
@@ -2683,10 +2699,14 @@ void NUMINT_rho_drv(void (*eval_rho)(), double *rho, double *F_dm,
                            atm, natm, bas, nbas, env_loc, cache);
         }
         NPomp_dsum_reduce_inplace(rhobufs, comp*ngrids);
-        free(cache);
-        free(env_loc);
+        pyscf_free(cache);
+        pyscf_free(env_loc);
         if (thread_id != 0) {
-                free(rho_priv);
+                pyscf_free(rho_priv);
         }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }

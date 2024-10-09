@@ -149,12 +149,12 @@ void get_Gv(double* Gv, double* rx, double* ry, double* rz, int* mesh, double* b
 void ewald_gs_nuc_grad(double* out, double* Gv, double* charges, double* coords,
                        double ew_eta, double weights, int natm, size_t ngrid)
 {
-    double *SI_real = (double*) malloc(natm*ngrid*sizeof(double));
-    double *SI_imag = (double*) malloc(natm*ngrid*sizeof(double)); 
+    double *SI_real = (double*) pyscf_malloc(natm*ngrid*sizeof(double));
+    double *SI_imag = (double*) pyscf_malloc(natm*ngrid*sizeof(double)); 
     get_SI_real_imag(SI_real, SI_imag, coords, Gv, natm, ngrid);
 
-    double *ZSI_real = calloc(ngrid, sizeof(double));
-    double *ZSI_imag = calloc(ngrid, sizeof(double));
+    double *ZSI_real = pyscf_calloc(ngrid, sizeof(double));
+    double *ZSI_imag = pyscf_calloc(ngrid, sizeof(double));
 
     NPdgemm('N', 'N', ngrid, 1, natm,
             ngrid, natm, ngrid, 0, 0, 0,
@@ -194,10 +194,10 @@ void ewald_gs_nuc_grad(double* out, double* Gv, double* charges, double* coords,
         }
     }
 }
-    free(SI_real);
-    free(SI_imag);
-    free(ZSI_real);
-    free(ZSI_imag);
+    pyscf_free(SI_real);
+    pyscf_free(SI_imag);
+    pyscf_free(ZSI_real);
+    pyscf_free(ZSI_imag);
 }
 
 

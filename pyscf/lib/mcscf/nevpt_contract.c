@@ -63,9 +63,13 @@ void NEVPTkern_dfec_dfae(double *gt2, double *eri, double *t2ket,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         double *cp0, *cp1;
         int i, k, m, n;
-        double *t2t = malloc(sizeof(double) * n4); // E^d_fE^a_e with ae transposed
+        double *t2t = pyscf_malloc(sizeof(double) * n4); // E^d_fE^a_e with ae transposed
 #pragma omp for schedule(dynamic, 4)
         for (k = 0; k < bcount; k++) {
                 for (i = 0; i < nnorb; i++) {
@@ -81,7 +85,11 @@ void NEVPTkern_dfec_dfae(double *gt2, double *eri, double *t2ket,
                        &D1, eri, &norb, t2t, &norb,
                        &D0, gt2+nnorb*k, &norb);
         }
-        free(t2t);
+        pyscf_free(t2t);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -99,9 +107,13 @@ void NEVPTkern_aedf_ecdf(double *gt2, double *eri, double *t2ket,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int i, k, m, n;
         double *cp0, *cp1;
-        double *t2t = malloc(sizeof(double) * n4);
+        double *t2t = pyscf_malloc(sizeof(double) * n4);
 #pragma omp for schedule(dynamic, 4)
         for (k = 0; k < bcount; k++) {
                 for (m = 0; m < norb; m++) {
@@ -117,7 +129,11 @@ void NEVPTkern_aedf_ecdf(double *gt2, double *eri, double *t2ket,
                        &D1, t2t, &n3, eri, &n3,
                        &D0, gt2+nnorb*k, &norb);
         }
-        free(t2t);
+        pyscf_free(t2t);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -135,6 +151,10 @@ void NEVPTkern_cedf_aedf(double *gt2, double *eri, double *t2ket,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int k, blen;
 #pragma omp for schedule(dynamic, 1)
         for (k = 0; k < bcount; k+=8) {
@@ -143,6 +163,10 @@ void NEVPTkern_cedf_aedf(double *gt2, double *eri, double *t2ket,
                        &D1, eri, &n3, t2ket+n4*k, &n3,
                        &D0, gt2+nnorb*k, &norb);
         }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -160,6 +184,10 @@ void NEVPTkern_dfea_dfec(double *gt2, double *eri, double *t2ket,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int k;
 #pragma omp for schedule(dynamic, 4)
         for (k = 0; k < bcount; k++) {
@@ -167,6 +195,10 @@ void NEVPTkern_dfea_dfec(double *gt2, double *eri, double *t2ket,
                        &D1, t2ket+n4*k, &norb, eri, &norb,
                        &D0, gt2+nnorb*k, &norb);
         }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -181,9 +213,9 @@ void NEVPTkern_sf(void (*contract_kernel)(),
         const int nnorb = norb * norb;
         const int n3 = nnorb * norb;
         const size_t n4 = nnorb * nnorb;
-        double *t1ket = malloc(sizeof(double) * nnorb * bcount);
-        double *t2ket = malloc(sizeof(double) * n4 * bcount);
-        double *gt2 = malloc(sizeof(double) * nnorb * bcount);
+        double *t1ket = pyscf_malloc(sizeof(double) * nnorb * bcount);
+        double *t2ket = pyscf_malloc(sizeof(double) * n4 * bcount);
+        double *gt2 = pyscf_malloc(sizeof(double) * nnorb * bcount);
 
         // t2[:,i,j,k,l] = E^i_j E^k_l|ket>
         FCI_t1ci_sf(ci0, t1ket, bcount, stra_id, strb_id,
@@ -195,9 +227,13 @@ void NEVPTkern_sf(void (*contract_kernel)(),
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int i, j, k, l, n, ij;
         double *pbra, *pt2;
-        double *tbra = malloc(sizeof(double) * nnorb * bcount);
+        double *tbra = pyscf_malloc(sizeof(double) * nnorb * bcount);
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < nnorb; ij++) { // loop ij for (<ket| E^j_i E^l_k)
                 i = ij / norb;
@@ -216,7 +252,11 @@ void NEVPTkern_sf(void (*contract_kernel)(),
                 tril2pdm_particle_symm(rdm3+(j*norb+i)*n4, tbra, gt2,
                                        bcount, j+1, norb);
         }
-        free(tbra);
+        pyscf_free(tbra);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 
         // reordering of rdm2 is needed: rdm2.transpose(1,0,2,3)
@@ -227,9 +267,9 @@ void NEVPTkern_sf(void (*contract_kernel)(),
                &D1, gt2, &nnorb, t1ket, &nnorb,
                &D1, rdm2, &nnorb);
 
-        free(gt2);
-        free(t1ket);
-        free(t2ket);
+        pyscf_free(gt2);
+        pyscf_free(t1ket);
+        pyscf_free(t2ket);
 }
 
 
@@ -241,11 +281,11 @@ void NEVPTcontract(void (*kernel)(),
         const int nnorb = norb * norb;
         const size_t n4 = nnorb * nnorb;
         int i, j, k, ib, strk, bcount;
-        double *pdm2 = malloc(sizeof(double) * n4);
+        double *pdm2 = pyscf_malloc(sizeof(double) * n4);
         double *cp1, *cp0;
 
-        _LinkT *clinka = malloc(sizeof(_LinkT) * nlinka * na);
-        _LinkT *clinkb = malloc(sizeof(_LinkT) * nlinkb * nb);
+        _LinkT *clinka = pyscf_malloc(sizeof(_LinkT) * nlinka * na);
+        _LinkT *clinkb = pyscf_malloc(sizeof(_LinkT) * nlinkb * nb);
         FCIcompress_link(clinka, link_indexa, norb, na, nlinka);
         FCIcompress_link(clinkb, link_indexb, norb, nb, nlinkb);
         NPdset0(pdm2, n4);
@@ -259,8 +299,8 @@ void NEVPTcontract(void (*kernel)(),
                                      norb, na, nb, nlinka, nlinkb, clinka, clinkb);
                 }
         }
-        free(clinka);
-        free(clinkb);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
 
         for (i = 0; i < norb; i++) {
         for (j = 0; j < norb; j++) {
@@ -270,6 +310,6 @@ void NEVPTcontract(void (*kernel)(),
                         cp1[k] = cp0[k];
                 }
         } }
-        free(pdm2);
+        pyscf_free(pdm2);
 }
 

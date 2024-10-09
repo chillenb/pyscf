@@ -18,6 +18,10 @@
 
 #include <fftw3.h>
 
+#ifdef PYSCF_USE_MKL
+#include "fftw3_mkl.h"
+#endif
+
 #define FFT_PLAN fftw_plan
 
 FFT_PLAN fft_create_r2c_plan(double* in, complex double* out, int rank, int* mesh);

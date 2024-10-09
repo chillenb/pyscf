@@ -26,6 +26,10 @@
 #include "gto/grid_ao_drv.h"
 #include "np_helper/np_helper.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define ALL_IMAGES      255
 #define IMGBLK          40
 #define OF_CMPLX        2
@@ -74,6 +78,9 @@ void PBCnr_ao_screen(uint8_t *non0table, double *coords, int ngrids,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int i, j, m;
         int np, nc, atm_id;
         size_t bas_id, ib;
@@ -122,6 +129,9 @@ void PBCnr_ao_screen(uint8_t *non0table, double *coords, int ngrids,
 next_blk:;
                 }
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -456,6 +466,9 @@ void PBCeval_loop(void (*fiter)(), FPtr_eval feval, FPtr_exp fexp,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         const int sh0 = shls_slice[0];
         const int sh1 = shls_slice[1];
         const size_t nao = ao_loc[sh1] - ao_loc[sh0];
@@ -466,7 +479,7 @@ void PBCeval_loop(void (*fiter)(), FPtr_eval feval, FPtr_exp fexp,
                           IMGBLK*param[POS_E1]*param[TENSOR]*di_max +
                           param[POS_E1]*param[TENSOR]*NCTR_CART) * BLKSIZE
                          + nkpts * IMGBLK * OF_CMPLX + nimgs);
-        double *buf = malloc(sizeof(double) * bufsize);
+        double *buf = pyscf_malloc(sizeof(double) * bufsize);
 #pragma omp for nowait schedule(dynamic, 1)
         for (k = 0; k < nblk*nshblk; k++) {
                 iloc = k / nblk;
@@ -481,7 +494,10 @@ void PBCeval_loop(void (*fiter)(), FPtr_eval feval, FPtr_exp fexp,
                          ao, coord+ip, rcut, non0table+ib*nbas,
                          atm, natm, bas, nbas, env);
         }
-        free(buf);
+        pyscf_free(buf);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 

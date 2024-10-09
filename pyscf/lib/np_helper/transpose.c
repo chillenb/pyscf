@@ -20,11 +20,16 @@
 #include <complex.h>
 #include "np_helper.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 /*
- * matrix a[n,m]
+ * matrix a[n,m], out of place transpose
  */
 void NPdtranspose(int n, int m, double *a, double *at)
 {
+#ifndef PYSCF_USE_MKL
         size_t i, j, j0, j1;
         for (j0 = 0; j0 < n; j0+=BLOCK_DIM) {
                 j1 = MIN(j0+BLOCK_DIM, n);
@@ -34,10 +39,17 @@ void NPdtranspose(int n, int m, double *a, double *at)
                         }
                 }
         }
+#else
+        int dynamic = mkl_get_dynamic();
+        mkl_set_dynamic(1);
+        mkl_domatcopy('R', 'T', n, m, 1.0, a, m, at, n);
+        mkl_set_dynamic(dynamic);
+#endif
 }
 
 void NPztranspose(int n, int m, double complex *a, double complex *at)
 {
+#ifndef PYSCF_USE_MKL
         size_t i, j, j0, j1;
         for (j0 = 0; j0 < n; j0+=BLOCK_DIM) {
                 j1 = MIN(j0+BLOCK_DIM, n);
@@ -47,11 +59,20 @@ void NPztranspose(int n, int m, double complex *a, double complex *at)
                         }
                 }
         }
+#else
+        int dynamic = mkl_get_dynamic();
+        mkl_set_dynamic(1);
+        const MKL_Complex16 one = {1.0, 0.0};
+        mkl_zomatcopy('R', 'T', n, m, one, (MKL_Complex16 *)a, m,
+                      (MKL_Complex16 *)at, n);
+        mkl_set_dynamic(dynamic);
+#endif
 }
 
 
 void NPdtranspose_021(int *shape, double *a, double *at)
 {
+#ifndef PYSCF_USE_MKL
 #pragma omp parallel default(none) \
         shared(shape, a, at)
 {
@@ -62,10 +83,22 @@ void NPdtranspose_021(int *shape, double *a, double *at)
                 NPdtranspose(shape[1], shape[2], a+ic*nm, at+ic*nm);
         }
 }
+#else
+        int dynamic = mkl_get_dynamic();
+        mkl_set_dynamic(1);
+        int nslice = shape[0];
+        int nrows = shape[1];
+        int ncols = shape[2];
+        mkl_domatcopy_batch_strided('R', 'T', nrows, ncols, 1.0, a, ncols,
+                                    nrows * ncols, at, nrows, nrows * ncols,
+                                    nslice);
+        mkl_set_dynamic(dynamic);
+#endif
 }
 
 void NPztranspose_021(int *shape, double complex *a, double complex *at)
 {
+#ifndef PYSCF_USE_MKL
 #pragma omp parallel default(none) \
         shared(shape, a, at)
 {
@@ -76,6 +109,18 @@ void NPztranspose_021(int *shape, double complex *a, double complex *at)
                 NPztranspose(shape[1], shape[2], a+ic*nm, at+ic*nm);
         }
 }
+#else
+        int dynamic = mkl_get_dynamic();
+        mkl_set_dynamic(1);
+        int nslice = shape[0];
+        int nrows = shape[1];
+        int ncols = shape[2];
+        const MKL_Complex16 one = {1.0, 0.0};
+        mkl_zomatcopy_batch_strided(
+            'R', 'T', nrows, ncols, one, (MKL_Complex16 *)a, ncols,
+            nrows * ncols, (MKL_Complex16 *)at, nrows, nrows * ncols, nslice);
+        mkl_set_dynamic(dynamic);
+#endif
 }
 
 

@@ -58,6 +58,7 @@ void NPzhermi_triu(int n, double complex *mat, int hermi)
 
 void NPdunpack_tril(int n, double *tril, double *mat, int hermi)
 {
+#ifndef PYSCF_USE_MKL
         size_t i, j, ij;
         for (ij = 0, i = 0; i < n; i++) {
                 for (j = 0; j <= i; j++, ij++) {
@@ -67,6 +68,14 @@ void NPdunpack_tril(int n, double *tril, double *mat, int hermi)
         if (hermi) {
                 NPdsymm_triu(n, mat, hermi);
         }
+#else
+        LAPACKE_mkl_dtpunpack(LAPACK_ROW_MAJOR, 'L', 'N', n, tril, 1, 1, n, n, mat, n);
+        if (hermi == HERMITIAN || hermi == SYMMETRIC) {
+                LAPACKE_mkl_dtpunpack(LAPACK_ROW_MAJOR, 'L', 'T', n, tril, 1, 1, n, n, mat, n);
+        } else if (hermi) {
+                NPdsymm_triu(n, mat, hermi);
+        }
+#endif
 }
 
 // unpack one row from the compact matrix-tril coefficients
@@ -84,6 +93,7 @@ void NPdunpack_row(int ndim, int row_id, double *tril, double *row)
 void NPzunpack_tril(int n, double complex *tril, double complex *mat,
                     int hermi)
 {
+#ifndef PYSCF_USE_MKL
         size_t i, j, ij;
         for (ij = 0, i = 0; i < n; i++) {
                 for (j = 0; j <= i; j++, ij++) {
@@ -93,26 +103,44 @@ void NPzunpack_tril(int n, double complex *tril, double complex *mat,
         if (hermi) {
                 NPzhermi_triu(n, mat, hermi);
         }
+#else
+        LAPACKE_mkl_ztpunpack(LAPACK_ROW_MAJOR, 'L', 'N', n, (void*) tril, 1, 1, n, n, (void*) mat, n);
+        if (hermi == HERMITIAN) {
+                LAPACKE_mkl_ztpunpack(LAPACK_ROW_MAJOR, 'L', 'C', n, (void*) tril, 1, 1, n, n, (void*) mat, n);
+        } else if (hermi == SYMMETRIC) {
+                LAPACKE_mkl_ztpunpack(LAPACK_ROW_MAJOR, 'L', 'T', n, (void*) tril, 1, 1, n, n, (void*) mat, n);
+        } else if (hermi) {
+                NPzhermi_triu(n, mat, hermi);
+        }
+#endif
 }
 
 void NPdpack_tril(int n, double *tril, double *mat)
 {
+//#ifndef PYSCF_USE_MKL
         size_t i, j, ij;
         for (ij = 0, i = 0; i < n; i++) {
                 for (j = 0; j <= i; j++, ij++) {
                         tril[ij] = mat[i*n+j];
                 }
         }
+// #else
+//         LAPACKE_mkl_dtppack(LAPACK_ROW_MAJOR, 'L', 'N', n, tril, 0, 0, n, n, mat, n);
+// #endif
 }
 
 void NPzpack_tril(int n, double complex *tril, double complex *mat)
 {
+// #ifndef PYSCF_USE_MKL
         size_t i, j, ij;
         for (ij = 0, i = 0; i < n; i++) {
                 for (j = 0; j <= i; j++, ij++) {
                         tril[ij] = mat[i*n+j];
                 }
         }
+// #else
+//         LAPACKE_mkl_ztppack(LAPACK_ROW_MAJOR, 'L', 'N', n, (void*) tril, 0, 0, n, n, (void*) mat, n);
+// #endif
 }
 
 /* out += in[idx[:,None],idy] */
@@ -213,6 +241,10 @@ void NPztakebak_2d(double complex *out, double complex *in, int *idx, int *idy,
 
 void NPdunpack_tril_2d(int count, int n, double *tril, double *mat, int hermi)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
 #pragma omp parallel default(none) \
         shared(count, n, tril, mat, hermi)
 {
@@ -224,11 +256,19 @@ void NPdunpack_tril_2d(int count, int n, double *tril, double *mat, int hermi)
                 NPdunpack_tril(n, tril+n2*ic, mat+nn*ic, hermi);
         }
 }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 
 void NPzunpack_tril_2d(int count, int n,
                        double complex *tril, double complex *mat, int hermi)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
 #pragma omp parallel default(none) \
         shared(count, n, tril, mat, hermi)
 {
@@ -240,10 +280,18 @@ void NPzunpack_tril_2d(int count, int n,
                 NPzunpack_tril(n, tril+n2*ic, mat+nn*ic, hermi);
         }
 }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 
 void NPdpack_tril_2d(int count, int n, double *tril, double *mat)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
 #pragma omp parallel default(none) \
         shared(count, n, tril, mat)
 {
@@ -255,10 +303,18 @@ void NPdpack_tril_2d(int count, int n, double *tril, double *mat)
                 NPdpack_tril(n, tril+n2*ic, mat+nn*ic);
         }
 }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 
 void NPzpack_tril_2d(int count, int n, double complex *tril, double complex *mat)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
 #pragma omp parallel default(none) \
         shared(count, n, tril, mat)
 {
@@ -270,5 +326,9 @@ void NPzpack_tril_2d(int count, int n, double complex *tril, double complex *mat
                 NPzpack_tril(n, tril+n2*ic, mat+nn*ic);
         }
 }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 

@@ -716,7 +716,7 @@ void CVHFnr_sr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
         assert(njsh == nish);
         assert(nksh == nish);
         assert(nlsh == nish);
-        int *block_loc = malloc(sizeof(int) * (nish+1));
+        int *block_loc = pyscf_malloc(sizeof(int) * (nish+1));
         uint32_t nblock = CVHFshls_block_partition(block_loc, shls_slice, ao_loc, AO_BLOCK_SIZE);
         uint32_t nblock2 = nblock * nblock;
         uint32_t nblock3 = nblock2 * nblock;
@@ -728,7 +728,7 @@ void CVHFnr_sr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
         float *q_ijij = (float *)vhfopt->logq_cond;
         float *q_iijj = q_ijij + Nbas2;
         float *dm_cond = (float *)vhfopt->dm_cond;
-        float *bq_ijij = malloc(sizeof(float) * nblock2*3);
+        float *bq_ijij = pyscf_malloc(sizeof(float) * nblock2*3);
         float *bq_iijj = bq_ijij + nblock2;
         float *bdm_cond = bq_iijj + nblock2;
         NPfcondense(NP_fmax, bq_ijij, q_ijij, block_loc, block_loc, nblock, nblock);
@@ -737,6 +737,10 @@ void CVHFnr_sr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ioff = ao_loc[ish0];
         int joff = ao_loc[jsh0];
         int koff = ao_loc[ksh0];
@@ -750,7 +754,7 @@ void CVHFnr_sr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
                 v_priv[i] = CVHFallocate_JKArray(jkop[i], shls_slice, ao_loc,
                                                  ncomp, nblock, size_limit);
         }
-        double *buf = malloc(sizeof(double) * (di*di*di*di*ncomp + di*di*2 + cache_size));
+        double *buf = pyscf_malloc(sizeof(double) * (di*di*di*di*ncomp + di*di*2 + cache_size));
         double *cache = buf + di*di*di*di*ncomp;
 #pragma omp for nowait schedule(dynamic, 1)
         for (blk_id = 0; blk_id < nblock3; blk_id++) {
@@ -828,13 +832,17 @@ void CVHFnr_sr_direct_drv(int (*intor)(), void (*fdot)(), JKOperator **jkop,
                 }
                 CVHFdeallocate_JKArray(v_priv[n]);
         }
-        free(buf);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
         for (idm = 0; idm < n_dm; idm++) {
-                free(tile_dms[idm]);
+                pyscf_free(tile_dms[idm]);
         }
-        free(block_loc);
-        free(bq_ijij);
+        pyscf_free(block_loc);
+        pyscf_free(bq_ijij);
 }
 
 // sqrt(-log(1e-9))
@@ -856,7 +864,7 @@ void CVHFnr_sr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, float *q_cond,
         int shls_slice[] = {0, nbas};
         const int cache_size = GTOmax_cache_size(intor, shls_slice, 1,
                                                  atm, natm, bas, nbas, env);
-        float *exps = malloc(sizeof(float) * nbas * 5);
+        float *exps = pyscf_malloc(sizeof(float) * nbas * 5);
         float *cs = exps + nbas;
         float *rx = cs + nbas;
         float *ry = rx + nbas;
@@ -885,6 +893,10 @@ void CVHFnr_sr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, float *q_cond,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         float fac_guess = .5f - logf(omega2)/4;
         int ish, jsh, li, lj;
         int ij, i, j, di, dj, dij, di2, dj2;
@@ -899,7 +911,7 @@ void CVHFnr_sr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, float *q_cond,
                 dj = ao_loc[ish+1] - ao_loc[ish];
                 di = MAX(di, dj);
         }
-        double *cache = malloc(sizeof(double) * (di*di*di*di + cache_size));
+        double *cache = pyscf_malloc(sizeof(double) * (di*di*di*di + cache_size));
         double *buf = cache + cache_size;
 
 #pragma omp for schedule(dynamic, 1)
@@ -990,9 +1002,13 @@ void CVHFnr_sr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, float *q_cond,
                         qiijj[jsh*Nbas+ish] = log_qmax;
                 }
         }
-        free(cache);
+        pyscf_free(cache);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(exps);
+        pyscf_free(exps);
 }
 
 void CVHFsetnr_sr_direct_scf(int (*intor)(), CINTOpt *cintopt, float *q_cond,

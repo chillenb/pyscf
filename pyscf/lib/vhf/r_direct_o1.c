@@ -281,7 +281,7 @@ void CVHFr_direct_drv(int (*intor)(), void (*fdot)(), void (**fjk)(),
                       int *atm, int natm, int *bas, int nbas, double *env)
 {
         const size_t nao = ao_loc[nbas];
-        int *tao = malloc(sizeof(int)*nao);
+        int *tao = pyscf_malloc(sizeof(int)*nao);
         CVHFtimerev_map(tao, bas, nbas);
         IntorEnvs envs = {natm, nbas, atm, bas, env, shls_slice, ao_loc, tao,
                 cintopt, ncomp};
@@ -295,12 +295,16 @@ void CVHFr_direct_drv(int (*intor)(), void (*fdot)(), void (**fjk)(),
                                                  atm, natm, bas, nbas, env);
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         size_t i, j, ij;
-        double complex *v_priv = malloc(sizeof(double complex) * jk_size);
+        double complex *v_priv = pyscf_malloc(sizeof(double complex) * jk_size);
         NPzset0(v_priv, jk_size);
         size_t bufsize = di*di*di*di*ncomp;
         bufsize = bufsize + di*di*8 + MAX(bufsize, (cache_size+1)/2);  // /2 for double complex
-        double complex *buf = malloc(sizeof(double complex) * bufsize);
+        double complex *buf = pyscf_malloc(sizeof(double complex) * bufsize);
 #pragma omp for nowait schedule(dynamic)
         for (ij = 0; ij < nbas2; ij++) {
                 i = ij / nbas;
@@ -314,9 +318,13 @@ void CVHFr_direct_drv(int (*intor)(), void (*fdot)(), void (**fjk)(),
                         vjk[i] += v_priv[i];
                 }
         }
-        free(v_priv);
-        free(buf);
+        pyscf_free(v_priv);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(tao);
+        pyscf_free(tao);
 }
 

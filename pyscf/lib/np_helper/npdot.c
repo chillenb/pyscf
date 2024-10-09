@@ -23,6 +23,10 @@
 #include "vhf/fblas.h"
 #include "np_helper/np_helper.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define MIN(X,Y)        ((X) < (Y) ? (X) : (Y))
 #define MAX(X,Y)        ((X) > (Y) ? (X) : (Y))
 
@@ -51,6 +55,14 @@ void NPdgemm(const char trans_a, const char trans_b,
         b += offsetb;
         c += offsetc;
 
+
+#ifdef PYSCF_USE_MKL
+        // if PYSCF_USE_MKL is defined,
+        // we are using threaded MKL blas.
+        dgemm_(&trans_a, &trans_b, &m, &n, &k,
+               &alpha, a, &lda, b, &ldb,
+               &beta, c, &ldc);
+#else
         if ((k/m) > 3 && (k/n) > 3) { // parallelize k
 
                 if (beta == 0) {
@@ -70,7 +82,7 @@ void NPdgemm(const char trans_a, const char trans_b,
 #pragma omp parallel private(i, j)
 {
                 double D0 = 0;
-                double *cpriv = malloc(sizeof(double) * (m*n+2));
+                double *cpriv = pyscf_malloc(sizeof(double) * (m*n+2));
                 size_t k0, k1, ij;
                 NPomp_split(&k0, &k1, k);
                 int dk = k1 - k0;
@@ -95,7 +107,7 @@ void NPdgemm(const char trans_a, const char trans_b,
                         } }
                 }
 
-                free(cpriv);
+                pyscf_free(cpriv);
 }
 
         } else if (m > n*2) { // parallelize m
@@ -134,6 +146,7 @@ void NPdgemm(const char trans_a, const char trans_b,
                 }
 }
         }
+#endif
 }
 
 
@@ -159,6 +172,14 @@ void NPzgemm(const char trans_a, const char trans_b,
         b += offsetb;
         c += offsetc;
 
+#ifdef PYSCF_USE_MKL
+        // if PYSCF_USE_MKL is defined,
+        // we are using threaded MKL blas.
+        zgemm_(&trans_a, &trans_b, &m, &n, &k,
+                alpha, a, &lda, b, &ldb,
+                beta, c, &ldc);
+#else
+
         if ((k/m) > 3 && (k/n) > 3) { // parallelize k
 
                 if (creal(*beta) == 0 && cimag(*beta) == 0) {
@@ -178,7 +199,7 @@ void NPzgemm(const char trans_a, const char trans_b,
 #pragma omp parallel private(i, j)
 {
                 double complex Z0 = 0;
-                double complex *cpriv = malloc(sizeof(double complex) * (m*n+2));
+                double complex *cpriv = pyscf_malloc(sizeof(double complex) * (m*n+2));
                 size_t k0, k1, ij;
                 NPomp_split(&k0, &k1, k);
                 int dk = k1 - k0;
@@ -202,7 +223,7 @@ void NPzgemm(const char trans_a, const char trans_b,
                                 c[i*Ldc+j] += cpriv[ij];
                         } }
                 }
-                free(cpriv);
+                pyscf_free(cpriv);
 }
 
         } else if (m > n*2) { // parallelize m
@@ -241,4 +262,6 @@ void NPzgemm(const char trans_a, const char trans_b,
                 }
 }
         }
+
+#endif
 }

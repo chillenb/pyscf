@@ -350,15 +350,19 @@ void SCIcontract_2e_bbaa(double *eri, double *ci0, double *ci1,
                          int norb, int na, int nb, int nlinka, int nlinkb,
                          int *link_indexa, int *link_indexb)
 {
-        _LinkTrilT *clinka = malloc(sizeof(_LinkTrilT) * nlinka * na);
-        _LinkTrilT *clinkb = malloc(sizeof(_LinkTrilT) * nlinkb * nb);
+        _LinkTrilT *clinka = pyscf_malloc(sizeof(_LinkTrilT) * nlinka * na);
+        _LinkTrilT *clinkb = pyscf_malloc(sizeof(_LinkTrilT) * nlinkb * nb);
         FCIcompress_link_tril(clinka, link_indexa, na, nlinka);
         FCIcompress_link_tril(clinkb, link_indexb, nb, nlinkb);
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int strk, ib, blen;
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)+2));
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)+2));
         double *ci1buf = NULL;
         for (ib = 0; ib < nb; ib += STRB_BLKSIZE) {
                 blen = MIN(STRB_BLKSIZE, nb-ib);
@@ -369,10 +373,14 @@ void SCIcontract_2e_bbaa(double *eri, double *ci0, double *ci1,
                                       nlinka, nlinkb, clinka, clinkb);
                 }
         }
-        free(t1buf);
+        pyscf_free(t1buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clinka);
-        free(clinkb);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
 }
 
 static void ctr_aaaa_kern(double *eri, double *ci0, double *ci1,
@@ -401,16 +409,20 @@ void SCIcontract_2e_aaaa(double *eri, double *ci0, double *ci1,
                          int norb, int na, int nb,
                          int inter_na, int nlinka, int *link_indexa)
 {
-        _LinkTrilT *clinka = malloc(sizeof(_LinkTrilT) * nlinka * inter_na);
+        _LinkTrilT *clinka = pyscf_malloc(sizeof(_LinkTrilT) * nlinka * inter_na);
         FCIcompress_link_tril(clinka, link_indexa, inter_na, nlinka);
         _LinkTrilT *clinkb = NULL;
 
         double *ci1bufs[MAX_THREADS];
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int strk, ib, blen;
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*norb*norb+2));
-        double *ci1buf = malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*norb*norb+2));
+        double *ci1buf = pyscf_malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
         ci1bufs[omp_get_thread_num()] = ci1buf;
         for (ib = 0; ib < nb; ib += STRB_BLKSIZE) {
                 blen = MIN(STRB_BLKSIZE, nb-ib);
@@ -426,10 +438,14 @@ void SCIcontract_2e_aaaa(double *eri, double *ci0, double *ci1,
                 FCIaxpy2d(ci1+ib, ci1buf, na, nb, blen);
 #pragma omp barrier
         }
-        free(ci1buf);
-        free(t1buf);
+        pyscf_free(ci1buf);
+        pyscf_free(t1buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clinka);
+        pyscf_free(clinka);
 }
 
 
@@ -495,14 +511,18 @@ void SCIrdm2_aaaa(void (*dm2kernel)(), double *rdm2, double *bra, double *ket,
         double *pdm2;
         NPdset0(rdm2, nnorb*nnorb);
 
-        _LinkT *clinka = malloc(sizeof(_LinkT) * nlinka * inter_na);
+        _LinkT *clinka = pyscf_malloc(sizeof(_LinkT) * nlinka * inter_na);
         FCIcompress_link(clinka, link_indexa, norb, inter_na, nlinka);
 
 #pragma omp parallel private(pdm2)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int strk, i, ib, blen;
-        double *buf = malloc(sizeof(double) * (nnorb*BUFBASE*2+2));
-        pdm2 = calloc(nnorb*nnorb, sizeof(double));
+        double *buf = pyscf_malloc(sizeof(double) * (nnorb*BUFBASE*2+2));
+        pdm2 = pyscf_calloc(nnorb*nnorb, sizeof(double));
 #pragma omp for schedule(dynamic, 40)
         for (strk = 0; strk < inter_na; strk++) {
                 for (ib = 0; ib < nb; ib += BUFBASE) {
@@ -517,16 +537,20 @@ void SCIrdm2_aaaa(void (*dm2kernel)(), double *rdm2, double *bra, double *ket,
                 rdm2[i] += pdm2[i];
         }
 }
-        free(pdm2);
-        free(buf);
+        pyscf_free(pdm2);
+        pyscf_free(buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clinka);
+        pyscf_free(clinka);
 
         int shape[] = {norb, nnorb, norb};
-        pdm2 = malloc(sizeof(double) * nnorb*nnorb);
+        pdm2 = pyscf_malloc(sizeof(double) * nnorb*nnorb);
         NPdtranspose_021(shape, rdm2, pdm2);
         NPdcopy(rdm2, pdm2, nnorb*nnorb);
-        free(pdm2);
+        pyscf_free(pdm2);
 }
 
 
@@ -568,15 +592,19 @@ void SCIcontract_2e_bbaa_symm(double *eri, double *ci0, double *ci1,
                               int *link_indexa, int *link_indexb,
                               int *dimirrep, int totirrep)
 {
-        _LinkTrilT *clinka = malloc(sizeof(_LinkTrilT) * nlinka * na);
-        _LinkTrilT *clinkb = malloc(sizeof(_LinkTrilT) * nlinkb * nb);
+        _LinkTrilT *clinka = pyscf_malloc(sizeof(_LinkTrilT) * nlinka * na);
+        _LinkTrilT *clinkb = pyscf_malloc(sizeof(_LinkTrilT) * nlinkb * nb);
         FCIcompress_link_tril(clinka, link_indexa, na, nlinka);
         FCIcompress_link_tril(clinkb, link_indexb, nb, nlinkb);
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int strk, ib, blen;
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)+2));
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)+2));
         double *ci1buf = NULL;
         for (ib = 0; ib < nb; ib += STRB_BLKSIZE) {
                 blen = MIN(STRB_BLKSIZE, nb-ib);
@@ -588,10 +616,14 @@ void SCIcontract_2e_bbaa_symm(double *eri, double *ci0, double *ci1,
                                       dimirrep, totirrep);
                 }
         }
-        free(t1buf);
+        pyscf_free(t1buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clinka);
-        free(clinkb);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
 }
 
 static void ctr_aaaa_symm(double *eri, double *ci0, double *ci1,
@@ -627,16 +659,20 @@ void SCIcontract_2e_aaaa_symm(double *eri, double *ci0, double *ci1,
                               int inter_na, int nlinka, int *link_indexa,
                               int *dimirrep, int totirrep)
 {
-        _LinkTrilT *clinka = malloc(sizeof(_LinkTrilT) * nlinka * inter_na);
+        _LinkTrilT *clinka = pyscf_malloc(sizeof(_LinkTrilT) * nlinka * inter_na);
         FCIcompress_link_tril(clinka, link_indexa, inter_na, nlinka);
         _LinkTrilT *clinkb = NULL;
 
         double *ci1bufs[MAX_THREADS];
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int strk, ib, blen;
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*norb*norb+2));
-        double *ci1buf = malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*norb*norb+2));
+        double *ci1buf = pyscf_malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
         ci1bufs[omp_get_thread_num()] = ci1buf;
         for (ib = 0; ib < nb; ib += STRB_BLKSIZE) {
                 blen = MIN(STRB_BLKSIZE, nb-ib);
@@ -653,8 +689,12 @@ void SCIcontract_2e_aaaa_symm(double *eri, double *ci0, double *ci1,
                 FCIaxpy2d(ci1+ib, ci1buf, na, nb, blen);
 #pragma omp barrier
         }
-        free(ci1buf);
-        free(t1buf);
+        pyscf_free(ci1buf);
+        pyscf_free(t1buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clinka);
+        pyscf_free(clinka);
 }

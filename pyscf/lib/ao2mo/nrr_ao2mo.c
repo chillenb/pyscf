@@ -32,6 +32,10 @@
 #include "vhf/nr_direct.h"
 #include "r_ao2mo.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define MIN(X,Y)        ((X) < (Y) ? (X) : (Y))
 #define MAX(X,Y)        ((X) > (Y) ? (X) : (Y))
 #define NCTRMAX         128
@@ -53,13 +57,13 @@ int AO2MOmmm_nrr_iltj(double complex *vout, double *eri,
         int j_start = envs->ket_start;
         int j_count = envs->ket_count;
         int i;
-        double *buf1 = malloc(sizeof(double)*n2c*i_count*3);
+        double *buf1 = pyscf_malloc(sizeof(double)*n2c*i_count*3);
         double *buf2 = buf1 + n2c*i_count;
         double *buf3 = buf2 + n2c*i_count;
         double *bufr, *bufi;
-        double *mo1 = malloc(sizeof(double) * n2c*MAX(i_count,j_count)*2);
+        double *mo1 = pyscf_malloc(sizeof(double) * n2c*MAX(i_count,j_count)*2);
         double *mo2, *mo_r, *mo_i;
-        double *eri_r = malloc(sizeof(double) * n2c*n2c*3);
+        double *eri_r = pyscf_malloc(sizeof(double) * n2c*n2c*3);
         double *eri_i = eri_r + n2c*n2c;
         double *eri1  = eri_i + n2c*n2c;
         double *vout1, *vout2, *vout3;
@@ -83,7 +87,7 @@ int AO2MOmmm_nrr_iltj(double complex *vout, double *eri,
                &D1, eri_r, &n2c, mo2, &n2c, &D0, buf2, &n2c);
         dgemm_(&TRANS_N, &TRANS_N, &n2c, &i_count, &n2c,
                &D1, eri_i, &n2c, mo1, &n2c, &D0, buf3, &n2c);
-        free(eri_r);
+        pyscf_free(eri_r);
 
         // C_qj^* (iq| = (ij|
         bufr = buf3;
@@ -102,7 +106,7 @@ int AO2MOmmm_nrr_iltj(double complex *vout, double *eri,
                 mo1[i] = mo_r[i] + mo_i[i];
                 mo2[i] = mo_i[i] - mo_r[i];
         }
-        vout1 = malloc(sizeof(double)*i_count*j_count*3);
+        vout1 = pyscf_malloc(sizeof(double)*i_count*j_count*3);
         vout2 = vout1 + i_count * j_count;
         vout3 = vout2 + i_count * j_count;
         dgemm_(&TRANS_T, &TRANS_N, &j_count, &i_count, &n2c,
@@ -114,9 +118,9 @@ int AO2MOmmm_nrr_iltj(double complex *vout, double *eri,
         for (i = 0; i < i_count*j_count; i++) {
                 vout[i] = (vout1[i]-vout3[i]) + (vout1[i]+vout2[i])*_Complex_I;
         }
-        free(vout1);
-        free(buf1);
-        free(mo1);
+        pyscf_free(vout1);
+        pyscf_free(buf1);
+        pyscf_free(mo1);
         return 0;
 }
 int AO2MOmmm_nrr_s1_iltj(double complex *vout, double *eri,
@@ -138,7 +142,7 @@ void AO2MOfill_nrr_s1(int (*intor)(), int (*fprescreen)(),
         int kl, jsh, ksh, lsh, dj, dk, dl;
         int icomp, i, j, k, l, n;
         int shls[4];
-        double *buf = malloc(sizeof(double) *di*nao*NCTRMAX*NCTRMAX*envs->ncomp);
+        double *buf = pyscf_malloc(sizeof(double) *di*nao*NCTRMAX*NCTRMAX*envs->ncomp);
         assert(buf);
         double *pbuf, *pbuf1, *peri;
 
@@ -188,7 +192,7 @@ void AO2MOfill_nrr_s1(int (*intor)(), int (*fprescreen)(),
                 }
                 eri += nao2 * dk * dl;
         }
-        free(buf);
+        pyscf_free(buf);
 }
 void AO2MOtranse1_nrr_s1(int (*fmmm)(),
                        double complex *vout, double *vin, int row_id,
@@ -215,10 +219,10 @@ void AO2MOnrr_e1_drv(int (*intor)(), void (*fill)(),
         int nao = ao_loc[nbas];
         int nmo = MAX(orbs_slice[1], orbs_slice[3]);
         int i;
-        double *mo_ra = malloc(sizeof(double) * nao * nmo);
-        double *mo_ia = malloc(sizeof(double) * nao * nmo);
-        double *mo_rb = malloc(sizeof(double) * nao * nmo);
-        double *mo_ib = malloc(sizeof(double) * nao * nmo);
+        double *mo_ra = pyscf_malloc(sizeof(double) * nao * nmo);
+        double *mo_ia = pyscf_malloc(sizeof(double) * nao * nmo);
+        double *mo_rb = pyscf_malloc(sizeof(double) * nao * nmo);
+        double *mo_ib = pyscf_malloc(sizeof(double) * nao * nmo);
         for (i = 0; i < nao*nmo; i++) {
                 mo_ra[i] = creal(mo_a[i]);
                 mo_ia[i] = cimag(mo_a[i]);
@@ -237,9 +241,9 @@ void AO2MOnrr_e1_drv(int (*intor)(), void (*fill)(),
                                   mo_rb, mo_ib, cintopt, vhfopt};
 
 
-        double *eri_ao = malloc(sizeof(double)* nao*nao*nkl*ncomp);
+        double *eri_ao = pyscf_malloc(sizeof(double)* nao*nao*nkl*ncomp);
         if (eri_ao == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in AO2MOnrr_e1_drv\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in AO2MOnrr_e1_drv\n",
                         sizeof(double) * nao*nao*nkl*ncomp);
                 exit(1);
         }
@@ -254,23 +258,39 @@ void AO2MOnrr_e1_drv(int (*intor)(), void (*fill)(),
 #pragma omp parallel default(none) \
         shared(fill, fprescreen, eri_ao, envs, intor, nkl, nbas) \
         private(ish)
+{
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
 #pragma omp for nowait schedule(dynamic)
         for (ish = 0; ish < nbas; ish++) {
                 (*fill)(intor, fprescreen, eri_ao, nkl, ish, &envs, 0);
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
+}
 
 #pragma omp parallel default(none) \
         shared(ftrans, fmmm, eri, eri_ao, nkl, ncomp, ij_count, envs, envs2) \
         private(kl)
+{
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
 #pragma omp for nowait schedule(static)
         for (kl = 0; kl < nkl*ncomp; kl++) {
                 (*ftrans)(fmmm, eri, eri_ao, kl, &envs);
                 (*ftrans)(fmmm, eri+ncomp*nkl*ij_count, eri_ao, kl, &envs2);
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
+}
 
-        free(eri_ao);
-        free(mo_ra);
-        free(mo_rb);
-        free(mo_ia);
-        free(mo_ib);
+        pyscf_free(eri_ao);
+        pyscf_free(mo_ra);
+        pyscf_free(mo_rb);
+        pyscf_free(mo_ia);
+        pyscf_free(mo_ib);
 }

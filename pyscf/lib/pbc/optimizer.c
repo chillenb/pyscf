@@ -20,13 +20,14 @@
 #include <math.h>
 #include "cint.h"
 #include "pbc/optimizer.h"
+#include "np_helper/np_helper.h"
 
 #define SQUARE(r)       (r[0]*r[0]+r[1]*r[1]+r[2]*r[2])
 
 void PBCinit_optimizer(PBCOpt **opt, int *atm, int natm,
                         int *bas, int nbas, double *env)
 {
-        PBCOpt *opt0 = malloc(sizeof(PBCOpt));
+        PBCOpt *opt0 = pyscf_malloc(sizeof(PBCOpt));
         opt0->rrcut = NULL;
         opt0->rcut = NULL;
         opt0->fprescreen = &PBCnoscreen;
@@ -41,12 +42,12 @@ void PBCdel_optimizer(PBCOpt **opt)
         }
 
         if (opt0->rrcut != NULL) {
-                free(opt0->rrcut);
+                pyscf_free(opt0->rrcut);
         }
         if (!opt0->rcut) {
-                free(opt0->rcut);
+                pyscf_free(opt0->rcut);
         }
-        free(opt0);
+        pyscf_free(opt0);
         *opt = NULL;
 }
 
@@ -93,9 +94,9 @@ void PBCset_rcut_cond(PBCOpt *opt, double *rcut,
                       int *atm, int natm, int *bas, int nbas, double *env)
 {
         if (opt->rrcut != NULL) {
-                free(opt->rrcut);
+                pyscf_free(opt->rrcut);
         }
-        opt->rrcut = (double *)malloc(sizeof(double) * nbas);
+        opt->rrcut = (double *)pyscf_malloc(sizeof(double) * nbas);
         opt->fprescreen = &PBCrcut_screen;
 
         int i;
@@ -108,9 +109,9 @@ void PBCset_rcut_cond_loose(PBCOpt *opt, double *rcut,
                             int *atm, int natm, int *bas, int nbas, double *env)
 {
         if (opt->rcut != NULL) {
-                free(opt->rcut);
+                pyscf_free(opt->rcut);
         }
-        opt->rcut = (double *)malloc(sizeof(double) * nbas);
+        opt->rcut = (double *)pyscf_malloc(sizeof(double) * nbas);
         opt->fprescreen = &PBCrcut_screen_loose;
 
         int i;

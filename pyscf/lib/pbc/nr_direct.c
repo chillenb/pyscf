@@ -30,6 +30,10 @@
 #include "np_helper/np_helper.h"
 #include "pbc/pbc.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define INDEX_MIN       -10000
 
 void PBCminimal_CINTEnvVars(CINTEnvVars *envs, int *atm, int natm, int *bas, int nbas, double *env,
@@ -543,7 +547,7 @@ static void approx_bvk_rcond0(float *rcond, int ish0, int ish1, BVKEnvs *envs_bv
         float *xcond = rcond;
         float *ycond = rcond + rs_cell_nbas * nbas;
         float *zcond = rcond + rs_cell_nbas * nbas * 2;
-        float *cache = malloc(sizeof(float) * nbas*3);
+        float *cache = pyscf_malloc(sizeof(float) * nbas*3);
         float *xj = cache;
         float *yj = cache + nbas;
         float *zj = cache + nbas * 2;
@@ -584,7 +588,7 @@ static void approx_bvk_rcond0(float *rcond, int ish0, int ish1, BVKEnvs *envs_bv
                         }
                 }
         }
-        free(cache);
+        pyscf_free(cache);
 }
 
 void PBCapprox_bvk_rcond(float *rcond, int ish_bvk, int jsh_bvk, BVKEnvs *envs_bvk,
@@ -689,6 +693,9 @@ static void qindex_abstract(int16_t *cond_abs, int16_t *qindex, size_t Nbas,
 {
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int nbasp = envs_bvk->nbasp;
         size_t nbas_bvk = nbasp * envs_bvk->ncells;
         int *seg_loc = envs_bvk->seg_loc;
@@ -707,6 +714,9 @@ static void qindex_abstract(int16_t *cond_abs, int16_t *qindex, size_t Nbas,
                 cond_abs[ish_bvk*nbas_bvk+jsh_bvk] = q_max;
                 cond_abs[jsh_bvk*nbas_bvk+ish_bvk] = q_max;
         } }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -754,7 +764,7 @@ void PBCVHF_direct_drv(void (*fdot)(), int (*intor)(),
                 NULL, qindex, cutoff};
 
         int rs_cell_nbas = seg_loc[nbasp];
-        float *rij_cond = malloc(sizeof(float) * rs_cell_nbas*nbas*3);
+        float *rij_cond = pyscf_malloc(sizeof(float) * rs_cell_nbas*nbas*3);
         approx_bvk_rcond0(rij_cond, ish0, ish1, &envs_bvk,
                           atm, natm, bas, nbas, env);
         int dsh_max = nimgs * 3;
@@ -762,7 +772,7 @@ void PBCVHF_direct_drv(void (*fdot)(), int (*intor)(),
 
         size_t Nbas = nbas;
         size_t nbas_bvk = nbasp * bvk_ncells;
-        int16_t *qidx_iijj = malloc(sizeof(int16_t) * nbas_bvk * nbas_bvk);
+        int16_t *qidx_iijj = pyscf_malloc(sizeof(int16_t) * nbas_bvk * nbas_bvk);
         if (qidx_iijj == NULL) {
                 fprintf(stderr, "failed to allocate qidx_iijj. nbas_bvk=%zd",
                         nbas_bvk);
@@ -774,6 +784,9 @@ void PBCVHF_direct_drv(void (*fdot)(), int (*intor)(),
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         size_t kl, n;
         int ij, i, j, k, l;
         int bvk_cells[4] = {0};
@@ -781,9 +794,9 @@ void PBCVHF_direct_drv(void (*fdot)(), int (*intor)(),
         CINTEnvVars envs_cint;
         PBCminimal_CINTEnvVars(&envs_cint, atm, natm, bas, nbas, env, cintopt);
 
-        double *v_priv = calloc(size_v, sizeof(double));
-        double *buf = malloc(sizeof(double) * MAX(cache_size, dsh_max*3));
-        float *rkl_cond = malloc(sizeof(float) * dsh_max*dsh_max*3);
+        double *v_priv = pyscf_calloc(size_v, sizeof(double));
+        double *buf = pyscf_malloc(sizeof(double) * MAX(cache_size, dsh_max*3));
+        float *rkl_cond = pyscf_malloc(sizeof(float) * dsh_max*dsh_max*3);
         int16_t *qk, *ql, *qcell0k, *qcell0l;
         int16_t kl_cutoff, qklkl_max;
 
@@ -842,12 +855,15 @@ void PBCVHF_direct_drv(void (*fdot)(), int (*intor)(),
                         out[n] += v_priv[n];
                 }
         }
-        free(buf);
-        free(v_priv);
-        free(rkl_cond);
+        pyscf_free(buf);
+        pyscf_free(v_priv);
+        pyscf_free(rkl_cond);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(rij_cond);
-        free(qidx_iijj);
+        pyscf_free(rij_cond);
+        pyscf_free(qidx_iijj);
 }
 
 #define DIFFUSED        2
@@ -889,7 +905,7 @@ void PBCVHF_direct_drv_nodddd(
                 NULL, qindex, cutoff};
 
         int rs_cell_nbas = seg_loc[nbasp];
-        float *rij_cond = malloc(sizeof(float) * rs_cell_nbas*nbas*3);
+        float *rij_cond = pyscf_malloc(sizeof(float) * rs_cell_nbas*nbas*3);
         approx_bvk_rcond0(rij_cond, ish0, ish1, &envs_bvk,
                           atm, natm, bas, nbas, env);
         int dsh_max = nimgs * 3;
@@ -897,7 +913,7 @@ void PBCVHF_direct_drv_nodddd(
 
         size_t Nbas = nbas;
         size_t nbas_bvk = nbasp * bvk_ncells;
-        int16_t *qidx_iijj = malloc(sizeof(int16_t) * nbas_bvk * nbas_bvk);
+        int16_t *qidx_iijj = pyscf_malloc(sizeof(int16_t) * nbas_bvk * nbas_bvk);
         if (qidx_iijj == NULL) {
                 fprintf(stderr, "failed to allocate qidx_iijj. nbas_bvk=%zd",
                         nbas_bvk);
@@ -907,7 +923,7 @@ void PBCVHF_direct_drv_nodddd(
         int16_t dmidx_max = _max_dmindex(dmindex, &envs_bvk);
         int16_t cutoff1 = cutoff - dmidx_max;
 
-        int *i_c_idx = malloc(sizeof(int) * nish * njsh * 2);
+        int *i_c_idx = pyscf_malloc(sizeof(int) * nish * njsh * 2);
         int *j_c_idx = i_c_idx + nish * njsh;
         int nij = 0;
         int nij_c = 0;
@@ -929,6 +945,9 @@ void PBCVHF_direct_drv_nodddd(
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         size_t kl, n;
         int ij, i, j, k, l, kshp, lshp;
         int bvk_cells[4] = {0};
@@ -936,9 +955,9 @@ void PBCVHF_direct_drv_nodddd(
         CINTEnvVars envs_cint;
         PBCminimal_CINTEnvVars(&envs_cint, atm, natm, bas, nbas, env, cintopt);
 
-        double *v_priv = calloc(size_v, sizeof(double));
-        double *buf = malloc(sizeof(double) * MAX(cache_size, dsh_max*3));
-        float *rkl_cond = malloc(sizeof(float) * dsh_max*dsh_max*3);
+        double *v_priv = pyscf_calloc(size_v, sizeof(double));
+        double *buf = pyscf_malloc(sizeof(double) * MAX(cache_size, dsh_max*3));
+        float *rkl_cond = pyscf_malloc(sizeof(float) * dsh_max*dsh_max*3);
         int16_t *qk, *ql, *qcell0k, *qcell0l;
         int16_t kl_cutoff, qklkl_max;
 
@@ -1024,13 +1043,16 @@ void PBCVHF_direct_drv_nodddd(
                         out[n] += v_priv[n];
                 }
         }
-        free(buf);
-        free(v_priv);
-        free(rkl_cond);
+        pyscf_free(buf);
+        pyscf_free(v_priv);
+        pyscf_free(rkl_cond);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(i_c_idx);
-        free(rij_cond);
-        free(qidx_iijj);
+        pyscf_free(i_c_idx);
+        pyscf_free(rij_cond);
+        pyscf_free(qidx_iijj);
 }
 
 void PBCVHFnr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, int16_t *qindex,
@@ -1047,17 +1069,20 @@ void PBCVHFnr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, int16_t *qindex,
                                                  atm, natm, bas, nbas, env);
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         double qtmp, tmp;
         int16_t itmp;
         size_t ij, i, j, di, dj, dij, di2, dj2, ish, jsh;
         int shls[4];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
         di = 0;
         for (ish = 0; ish < nbas; ish++) {
                 dj = ao_loc[ish+1] - ao_loc[ish];
                 di = MAX(di, dj);
         }
-        double *buf = malloc(sizeof(double) * di*di*di*di);
+        double *buf = pyscf_malloc(sizeof(double) * di*di*di*di);
 #pragma omp for schedule(dynamic)
         for (ish = 0; ish < nbas; ish++) {
                 for (jsh = 0; jsh <= ish; jsh++) {
@@ -1104,8 +1129,11 @@ void PBCVHFnr_int2e_q_cond(int (*intor)(), CINTOpt *cintopt, int16_t *qindex,
                         qiijj[jsh*Nbas+ish] = itmp;
                 }
         }
-        free(buf);
-        free(cache);
+        pyscf_free(buf);
+        pyscf_free(cache);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -1121,8 +1149,8 @@ void PBCVHFnr_sindex(int16_t *sindex, int *atm, int natm,
 {
         size_t Nbas = nbas;
         size_t Nbas1 = nbas + 1;
-        int *exps_group_loc = malloc(sizeof(int) * Nbas1);
-        float *exps = malloc(sizeof(double) * Nbas1 * 5);
+        int *exps_group_loc = pyscf_malloc(sizeof(int) * Nbas1);
+        float *exps = pyscf_malloc(sizeof(double) * Nbas1 * 5);
         float *cs = exps + Nbas1;
         float *rx = cs + Nbas1;
         float *ry = rx + Nbas1;
@@ -1172,6 +1200,9 @@ void PBCVHFnr_sindex(int16_t *sindex, int *atm, int natm,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         float fac_guess = .5f - logf(omega2)/4;
         int ijb, ib, jb, i0, j0, i1, j1, i, j, li, lj;
         float dx, dy, dz, ai, aj, ci, cj, aij, a1, fi, fj, rr, rij, dri, drj;
@@ -1223,9 +1254,12 @@ void PBCVHFnr_sindex(int16_t *sindex, int *atm, int natm,
                         } }
                 }
         }
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(exps);
-        free(exps_group_loc);
+        pyscf_free(exps);
+        pyscf_free(exps_group_loc);
 }
 
 void PBCVHFsetnr_sindex(int16_t *sindex, int *atm, int natm,

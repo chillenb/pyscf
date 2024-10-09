@@ -27,6 +27,10 @@
 #include "vhf/fblas.h"
 #include "np_helper/np_helper.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define INTBUFMAX       1000
 #define INTBUFMAX10     8000
 #define IMGBLK          80
@@ -247,7 +251,7 @@ void PBCsr2c_k_drv(int (*intor)(), void (*fill)(), double complex *out,
     const int jsh0 = shls_slice[2];
     const int jsh1 = shls_slice[3];
     const int njsh = jsh1 - jsh0;
-    double *expkL_r = malloc(sizeof(double) * nimgs*nkpts * OF_CMPLX);
+    double *expkL_r = pyscf_malloc(sizeof(double) * nimgs*nkpts * OF_CMPLX);
     double *expkL_i = expkL_r + nimgs*nkpts;
     int i;
     for (i = 0; i < nimgs*nkpts; i++) {
@@ -259,11 +263,14 @@ void PBCsr2c_k_drv(int (*intor)(), void (*fill)(), double complex *out,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
     int jsh;
-    double *env_loc = malloc(sizeof(double)*nenv);
+    double *env_loc = pyscf_malloc(sizeof(double)*nenv);
     NPdcopy(env_loc, env, nenv);
     size_t count = nkpts * OF_CMPLX + nimgs + 1;
-    double *buf = malloc(sizeof(double)*(count*INTBUFMAX10*comp+cache_size));
+    double *buf = pyscf_malloc(sizeof(double)*(count*INTBUFMAX10*comp+cache_size));
 #pragma omp for schedule(dynamic)
     for (jsh = 0; jsh < njsh; jsh++) {
         (*fill)(intor, out, nkpts, comp, nimgs, jsh,
@@ -271,10 +278,13 @@ void PBCsr2c_k_drv(int (*intor)(), void (*fill)(), double complex *out,
                 shls_slice, ao_loc, cintopt, refuniqshl_map, uniq_Rcut2s,
                 atm, natm, bas, nbas, env);
     }
-    free(buf);
-    free(env_loc);
+    pyscf_free(buf);
+    pyscf_free(env_loc);
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-    free(expkL_r);
+    pyscf_free(expkL_r);
 }
 
 // non-split basis implementation of j3c
@@ -535,10 +545,13 @@ void PBCsr3c_g_drv(int (*intor)(), void (*fill)(), double *out,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int ish, jsh, ij;
-        double *env_loc = malloc(sizeof(double)*nenv);
+        double *env_loc = pyscf_malloc(sizeof(double)*nenv);
         memcpy(env_loc, env, sizeof(double)*nenv);
-        double *buf = malloc(sizeof(double)*(count+cache_size));
+        double *buf = pyscf_malloc(sizeof(double)*(count+cache_size));
 #pragma omp for schedule(dynamic)
         for (ij = 0; ij < nish*njsh; ij++) {
             ish = ij / njsh;
@@ -556,8 +569,11 @@ void PBCsr3c_g_drv(int (*intor)(), void (*fill)(), double *out,
                     uniq_Rcut2s, uniqshlpr_dij_loc,
                     atm, natm, bas, nbas, env);
         }
-        free(buf);
-        free(env_loc);
+        pyscf_free(buf);
+        pyscf_free(env_loc);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -950,7 +966,7 @@ void PBCsr3c_bvk_k_drv(int (*intor)(), void (*fill)(), double *out,
     const int nish = ish1 - ish0;
     const int njsh = jsh1 - jsh0;
 
-    double *expkL_r = malloc(sizeof(double) * bvk_nimgs*nkpts * OF_CMPLX);
+    double *expkL_r = pyscf_malloc(sizeof(double) * bvk_nimgs*nkpts * OF_CMPLX);
     double *expkL_i = expkL_r + bvk_nimgs*nkpts;
     int i;
     for (i = 0; i < bvk_nimgs*nkpts; i++) {
@@ -970,10 +986,13 @@ void PBCsr3c_bvk_k_drv(int (*intor)(), void (*fill)(), double *out,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
     int ish, jsh, ij;
-    double *env_loc = malloc(sizeof(double)*nenv);
+    double *env_loc = pyscf_malloc(sizeof(double)*nenv);
     memcpy(env_loc, env, sizeof(double)*nenv);
-    double *buf = malloc(sizeof(double)*(count+cache_size));
+    double *buf = pyscf_malloc(sizeof(double)*(count+cache_size));
 #pragma omp for schedule(dynamic)
     for (ij = 0; ij < nish*njsh; ij++) {
         ish = ij / njsh;
@@ -991,10 +1010,13 @@ void PBCsr3c_bvk_k_drv(int (*intor)(), void (*fill)(), double *out,
                 uniq_Rcut2s, uniqshlpr_dij_loc,
                 atm, natm, bas, nbas, env);
     }
-    free(buf);
-    free(env_loc);
+    pyscf_free(buf);
+    pyscf_free(env_loc);
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-    free(expkL_r);
+    pyscf_free(expkL_r);
 }
 
 // single k-point, no bvk
@@ -1208,7 +1230,7 @@ void PBCsr3c_k_drv(int (*intor)(), void (*fill)(), double *out,
     const int nish = ish1 - ish0;
     const int njsh = jsh1 - jsh0;
 
-    double *expkL_r = malloc(sizeof(double) * nimgs*nkpts * OF_CMPLX);
+    double *expkL_r = pyscf_malloc(sizeof(double) * nimgs*nkpts * OF_CMPLX);
     double *expkL_i = expkL_r + nimgs*nkpts;
     int i;
     for (i = 0; i < nimgs*nkpts; i++) {
@@ -1228,10 +1250,13 @@ void PBCsr3c_k_drv(int (*intor)(), void (*fill)(), double *out,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
     int ish, jsh, ij;
-    double *env_loc = malloc(sizeof(double)*nenv);
+    double *env_loc = pyscf_malloc(sizeof(double)*nenv);
     memcpy(env_loc, env, sizeof(double)*nenv);
-    double *buf = malloc(sizeof(double)*(count+cache_size));
+    double *buf = pyscf_malloc(sizeof(double)*(count+cache_size));
 #pragma omp for schedule(dynamic)
     for (ij = 0; ij < nish*njsh; ij++) {
         ish = ij / njsh;
@@ -1248,10 +1273,13 @@ void PBCsr3c_k_drv(int (*intor)(), void (*fill)(), double *out,
                 uniq_Rcut2s, uniqshlpr_dij_loc,
                 atm, natm, bas, nbas, env);
     }
-    free(buf);
-    free(env_loc);
+    pyscf_free(buf);
+    pyscf_free(env_loc);
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-    free(expkL_r);
+    pyscf_free(expkL_r);
 }
 
 // k-point pairs, bvk
@@ -1608,7 +1636,7 @@ void PBCsr3c_bvk_kk_drv(int (*intor)(), void (*fill)(), double *out,
     const int nish = ish1 - ish0;
     const int njsh = jsh1 - jsh0;
 
-    double *expkL_r = malloc(sizeof(double) * bvk_nimgs*nkpts * OF_CMPLX);
+    double *expkL_r = pyscf_malloc(sizeof(double) * bvk_nimgs*nkpts * OF_CMPLX);
     double *expkL_i = expkL_r + bvk_nimgs*nkpts;
     int i;
     for (i = 0; i < bvk_nimgs*nkpts; i++) {
@@ -1628,10 +1656,13 @@ void PBCsr3c_bvk_kk_drv(int (*intor)(), void (*fill)(), double *out,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
     int ish, jsh, ij;
-    double *env_loc = malloc(sizeof(double)*nenv);
+    double *env_loc = pyscf_malloc(sizeof(double)*nenv);
     memcpy(env_loc, env, sizeof(double)*nenv);
-    double *buf = malloc(sizeof(double)*(count+cache_size));
+    double *buf = pyscf_malloc(sizeof(double)*(count+cache_size));
 #pragma omp for schedule(dynamic)
     for (ij = 0; ij < nish*njsh; ij++) {
         ish = ij / njsh;
@@ -1649,10 +1680,13 @@ void PBCsr3c_bvk_kk_drv(int (*intor)(), void (*fill)(), double *out,
                 uniq_Rcut2s, uniqshlpr_dij_loc,
                 atm, natm, bas, nbas, env);
     }
-    free(buf);
-    free(env_loc);
+    pyscf_free(buf);
+    pyscf_free(env_loc);
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-    free(expkL_r);
+    pyscf_free(expkL_r);
 }
 
 // k-point pairs, no bvk
@@ -1877,7 +1911,7 @@ void PBCsr3c_kk_drv(int (*intor)(), void (*fill)(), double *out,
     const int nish = ish1 - ish0;
     const int njsh = jsh1 - jsh0;
 
-    double *expkL_r = malloc(sizeof(double) * nimgs*nkpts * OF_CMPLX);
+    double *expkL_r = pyscf_malloc(sizeof(double) * nimgs*nkpts * OF_CMPLX);
     double *expkL_i = expkL_r + nimgs*nkpts;
     int i;
     for (i = 0; i < nimgs*nkpts; i++) {
@@ -1897,10 +1931,13 @@ void PBCsr3c_kk_drv(int (*intor)(), void (*fill)(), double *out,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
     int ish, jsh, ij;
-    double *env_loc = malloc(sizeof(double)*nenv);
+    double *env_loc = pyscf_malloc(sizeof(double)*nenv);
     memcpy(env_loc, env, sizeof(double)*nenv);
-    double *buf = malloc(sizeof(double)*(count+cache_size));
+    double *buf = pyscf_malloc(sizeof(double)*(count+cache_size));
 #pragma omp for schedule(dynamic)
     for (ij = 0; ij < nish*njsh; ij++) {
         ish = ij / njsh;
@@ -1918,8 +1955,11 @@ void PBCsr3c_kk_drv(int (*intor)(), void (*fill)(), double *out,
                 uniq_Rcut2s, uniqshlpr_dij_loc,
                 atm, natm, bas, nbas, env);
     }
-    free(buf);
-    free(env_loc);
+    pyscf_free(buf);
+    pyscf_free(env_loc);
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-    free(expkL_r);
+    pyscf_free(expkL_r);
 }

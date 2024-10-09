@@ -386,25 +386,29 @@ void CCsd_t_contract(double *e_tot,
 {
         int da = a1 - a0;
         int db = b1 - b0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*b1);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*b1);
         size_t njobs = _ccsd_t_gen_jobs(jobs, nocc, nvir, a0, a1, b0, b1,
                                         cache_row_a, cache_col_a,
                                         cache_row_b, cache_col_b, sizeof(double));
-        int *permute_idx = malloc(sizeof(int) * nocc*nocc*nocc * 6);
+        int *permute_idx = pyscf_malloc(sizeof(int) * nocc*nocc*nocc * 6);
         _make_permute_indices(permute_idx, nocc);
 #pragma omp parallel default(none) \
         shared(njobs, nocc, nvir, mo_energy, t1T, t2T, nirrep, o_ir_loc, \
                v_ir_loc, oo_ir_loc, orbsym, vooo, fvo, jobs, e_tot, permute_idx, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        double *cache1 = malloc(sizeof(double) * (nocc*nocc*nocc*3+2));
+        double *cache1 = pyscf_malloc(sizeof(double) * (nocc*nocc*nocc*3+2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in CCsd_t_contract\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in CCsd_t_contract\n",
                         sizeof(double) * nocc*nocc*nocc*3);
                 exit(1);
         }
-        double *t1Thalf = malloc(sizeof(double) * nvir*nocc * 2);
+        double *t1Thalf = pyscf_malloc(sizeof(double) * nvir*nocc * 2);
         double *fvohalf = t1Thalf + nvir*nocc;
         for (k = 0; k < nvir*nocc; k++) {
                 t1Thalf[k] = t1T[k] * .5;
@@ -421,13 +425,17 @@ void CCsd_t_contract(double *e_tot,
                                fvohalf, vooo, cache1, jobs[k].cache, permute_idx,
                                1.0);
         }
-        free(t1Thalf);
-        free(cache1);
+        pyscf_free(t1Thalf);
+        pyscf_free(cache1);
 #pragma omp critical
         *e_tot += e;
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-        free(permute_idx);
-        free(jobs);
+        pyscf_free(permute_idx);
+        pyscf_free(jobs);
 }
 
 void QCIsd_t_contract(double *e_tot,
@@ -441,25 +449,29 @@ void QCIsd_t_contract(double *e_tot,
 {
         int da = a1 - a0;
         int db = b1 - b0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*b1);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*b1);
         size_t njobs = _ccsd_t_gen_jobs(jobs, nocc, nvir, a0, a1, b0, b1,
                                         cache_row_a, cache_col_a,
                                         cache_row_b, cache_col_b, sizeof(double));
-        int *permute_idx = malloc(sizeof(int) * nocc*nocc*nocc * 6);
+        int *permute_idx = pyscf_malloc(sizeof(int) * nocc*nocc*nocc * 6);
         _make_permute_indices(permute_idx, nocc);
 #pragma omp parallel default(none) \
         shared(njobs, nocc, nvir, mo_energy, t1T, t2T, nirrep, o_ir_loc, \
                v_ir_loc, oo_ir_loc, orbsym, vooo, fvo, jobs, e_tot, permute_idx, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        double *cache1 = malloc(sizeof(double) * (nocc*nocc*nocc*3+2));
+        double *cache1 = pyscf_malloc(sizeof(double) * (nocc*nocc*nocc*3+2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in QCIsd_t_contract\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in QCIsd_t_contract\n",
                         sizeof(double) * nocc*nocc*nocc*3);
                 exit(1);
         }
-        double *t1Thalf = malloc(sizeof(double) * nvir*nocc * 2);
+        double *t1Thalf = pyscf_malloc(sizeof(double) * nvir*nocc * 2);
         double *fvohalf = t1Thalf + nvir*nocc;
         for (k = 0; k < nvir*nocc; k++) {
                 t1Thalf[k] = t1T[k] * .5;
@@ -476,13 +488,17 @@ void QCIsd_t_contract(double *e_tot,
                                fvohalf, vooo, cache1, jobs[k].cache, permute_idx,
                                2.0);
         }
-        free(t1Thalf);
-        free(cache1);
+        pyscf_free(t1Thalf);
+        pyscf_free(cache1);
 #pragma omp critical
         *e_tot += e;
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-        free(permute_idx);
-        free(jobs);
+        pyscf_free(permute_idx);
+        pyscf_free(jobs);
 }
 
 
@@ -619,28 +635,32 @@ void CCsd_t_zcontract(double complex *e_tot,
 {
         int da = a1 - a0;
         int db = b1 - b0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*b1);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*b1);
         size_t njobs = _ccsd_t_gen_jobs(jobs, nocc, nvir, a0, a1, b0, b1,
                                         cache_row_a, cache_col_a,
                                         cache_row_b, cache_col_b,
                                         sizeof(double complex));
 
-        int *permute_idx = malloc(sizeof(int) * nocc*nocc*nocc * 6);
+        int *permute_idx = pyscf_malloc(sizeof(int) * nocc*nocc*nocc * 6);
         _make_permute_indices(permute_idx, nocc);
 
 #pragma omp parallel default(none) \
         shared(njobs, nocc, nvir, mo_energy, t1T, t2T, nirrep, o_ir_loc, \
                v_ir_loc, oo_ir_loc, orbsym, vooo, fvo, jobs, e_tot, permute_idx, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        double complex *cache1 = malloc(sizeof(double complex) * (nocc*nocc*nocc*3+2));
+        double complex *cache1 = pyscf_malloc(sizeof(double complex) * (nocc*nocc*nocc*3+2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in CCsd_t_zcontract\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in CCsd_t_zcontract\n",
                         sizeof(double complex) * nocc*nocc*nocc*3);
                 exit(1);
         }
-        double complex *t1Thalf = malloc(sizeof(double complex) * nvir*nocc * 2);
+        double complex *t1Thalf = pyscf_malloc(sizeof(double complex) * nvir*nocc * 2);
         double complex *fvohalf = t1Thalf + nvir*nocc;
         for (k = 0; k < nvir*nocc; k++) {
                 t1Thalf[k] = t1T[k] * .5;
@@ -657,13 +677,17 @@ void CCsd_t_zcontract(double complex *e_tot,
                                fvohalf, vooo, cache1, jobs[k].cache, permute_idx,
                                1.0);
         }
-        free(t1Thalf);
-        free(cache1);
+        pyscf_free(t1Thalf);
+        pyscf_free(cache1);
 #pragma omp critical
         *e_tot += e;
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-        free(permute_idx);
-        free(jobs);
+        pyscf_free(permute_idx);
+        pyscf_free(jobs);
 }
 
 void QCIsd_t_zcontract(double complex *e_tot,
@@ -677,28 +701,32 @@ void QCIsd_t_zcontract(double complex *e_tot,
 {
         int da = a1 - a0;
         int db = b1 - b0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*b1);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*b1);
         size_t njobs = _ccsd_t_gen_jobs(jobs, nocc, nvir, a0, a1, b0, b1,
                                         cache_row_a, cache_col_a,
                                         cache_row_b, cache_col_b,
                                         sizeof(double complex));
 
-        int *permute_idx = malloc(sizeof(int) * nocc*nocc*nocc * 6);
+        int *permute_idx = pyscf_malloc(sizeof(int) * nocc*nocc*nocc * 6);
         _make_permute_indices(permute_idx, nocc);
 
 #pragma omp parallel default(none) \
         shared(njobs, nocc, nvir, mo_energy, t1T, t2T, nirrep, o_ir_loc, \
                v_ir_loc, oo_ir_loc, orbsym, vooo, fvo, jobs, e_tot, permute_idx, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        double complex *cache1 = malloc(sizeof(double complex) * (nocc*nocc*nocc*3+2));
+        double complex *cache1 = pyscf_malloc(sizeof(double complex) * (nocc*nocc*nocc*3+2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in QCIsd_t_zcontract\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in QCIsd_t_zcontract\n",
                         sizeof(double complex) * nocc*nocc*nocc*3);
                 exit(1);
         }
-        double complex *t1Thalf = malloc(sizeof(double complex) * nvir*nocc * 2);
+        double complex *t1Thalf = pyscf_malloc(sizeof(double complex) * nvir*nocc * 2);
         double complex *fvohalf = t1Thalf + nvir*nocc;
         for (k = 0; k < nvir*nocc; k++) {
                 t1Thalf[k] = t1T[k] * .5;
@@ -715,13 +743,17 @@ void QCIsd_t_zcontract(double complex *e_tot,
                                fvohalf, vooo, cache1, jobs[k].cache, permute_idx,
                                2.0);
         }
-        free(t1Thalf);
-        free(cache1);
+        pyscf_free(t1Thalf);
+        pyscf_free(cache1);
 #pragma omp critical
         *e_tot += e;
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-        free(permute_idx);
-        free(jobs);
+        pyscf_free(permute_idx);
+        pyscf_free(jobs);
 }
 
 
@@ -866,25 +898,29 @@ void MPICCsd_t_contract(double *e_tot, double *mo_energy, double *t1T,
         int da = a1 - a0;
         int db = b1 - b0;
         int dc = c1 - c0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*dc);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*dc);
         size_t njobs = _MPICCsd_t_gen_jobs(jobs, nocc, nvir, slices, data_ptrs);
 
-        int *permute_idx = malloc(sizeof(int) * nocc*nocc*nocc * 6);
+        int *permute_idx = pyscf_malloc(sizeof(int) * nocc*nocc*nocc * 6);
         _make_permute_indices(permute_idx, nocc);
 
 #pragma omp parallel default(none) \
         shared(njobs, nocc, nvir, mo_energy, t1T, fvo, jobs, e_tot, slices, \
                data_ptrs, permute_idx, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        double *cache1 = malloc(sizeof(double) * (nocc*nocc*nocc*3+2));
+        double *cache1 = pyscf_malloc(sizeof(double) * (nocc*nocc*nocc*3+2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in MPICCsd_t_contract\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in MPICCsd_t_contract\n",
                         sizeof(double) * nocc*nocc*nocc*3);
                 exit(1);
         }
-        double *t1Thalf = malloc(sizeof(double) * nvir*nocc * 2);
+        double *t1Thalf = pyscf_malloc(sizeof(double) * nvir*nocc * 2);
         double *fvohalf = t1Thalf + nvir*nocc;
         for (k = 0; k < nvir*nocc; k++) {
                 t1Thalf[k] = t1T[k] * .5;
@@ -900,13 +936,17 @@ void MPICCsd_t_contract(double *e_tot, double *mo_energy, double *t1T,
                                     fvohalf, slices, data_ptrs, cache1,
                                     permute_idx, 1.0);
         }
-        free(t1Thalf);
-        free(cache1);
+        pyscf_free(t1Thalf);
+        pyscf_free(cache1);
 #pragma omp critical
         *e_tot += e;
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-        free(permute_idx);
-        free(jobs);
+        pyscf_free(permute_idx);
+        pyscf_free(jobs);
 }
 
 /*****************************************************************************
@@ -1099,25 +1139,29 @@ void CCsd_zcontract_t3T(double complex *t3Tw, double complex *t3Tv, double *mo_e
         int da = a1 - a0;
         int db = b1 - b0;
         int dc = c1 - c0;
-        CacheJob *jobs = malloc(sizeof(CacheJob) * da*db*dc);
+        CacheJob *jobs = pyscf_malloc(sizeof(CacheJob) * da*db*dc);
         size_t njobs = _CCsd_t_gen_jobs_full(jobs, nocc, nvir, slices);
 
-        int *permute_idx = malloc(sizeof(int) * nocc*nocc*nocc * 6);
+        int *permute_idx = pyscf_malloc(sizeof(int) * nocc*nocc*nocc * 6);
         _make_permute_indices(permute_idx, nocc);
 
 #pragma omp parallel default(none) \
         shared(njobs, nocc, nvir, nkpts, t3Tw, t3Tv, mo_offset, mo_energy, t1T, fvo, jobs, slices, \
                data_ptrs, permute_idx, stderr)
 {
+#ifdef PYSCF_USE_MKL
+    int save = mkl_set_num_threads_local(1);
+#endif
+
         int a, b, c;
         size_t k;
-        complex double *cache1 = malloc(sizeof(double complex) * (nocc*nocc*nocc*3+2));
+        complex double *cache1 = pyscf_malloc(sizeof(double complex) * (nocc*nocc*nocc*3+2));
         if (cache1 == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in CCsd_zcontract_t3T\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in CCsd_zcontract_t3T\n",
                         sizeof(double complex) * nocc*nocc*nocc*3);
                 exit(1);
         }
-        complex double *t1Thalf = malloc(sizeof(double complex) * nkpts*nvir*nocc*2);
+        complex double *t1Thalf = pyscf_malloc(sizeof(double complex) * nkpts*nvir*nocc*2);
         complex double *fvohalf = t1Thalf + nkpts*nvir*nocc;
         for (k = 0; k < nkpts*nvir*nocc; k++) {
                 t1Thalf[k] = t1T[k] * .5;
@@ -1132,10 +1176,14 @@ void CCsd_zcontract_t3T(double complex *t3Tw, double complex *t3Tv, double *mo_e
                                fvohalf, slices, data_ptrs, cache1,
                                permute_idx);
         }
-        free(t1Thalf);
-        free(cache1);
+        pyscf_free(t1Thalf);
+        pyscf_free(cache1);
+
+#ifdef PYSCF_USE_MKL
+    mkl_set_num_threads_local(save);
+#endif
 }
-        free(jobs);
-        free(permute_idx);
+        pyscf_free(jobs);
+        pyscf_free(permute_idx);
 }
 

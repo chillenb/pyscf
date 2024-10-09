@@ -23,6 +23,10 @@
 #include "np_helper/np_helper.h"
 #include "vhf/fblas.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 /*
  * a * v1 + b * v2.transpose(0,2,1,3)
  */
@@ -55,6 +59,7 @@ void CCmake_0213(double *out, double *v1, double *v2, int count, int m,
  */
 void CCsum021(double *out, double *v1, double *v2, int count, int m)
 {
+#ifndef PYSCF_USE_MKL
 #pragma omp parallel default(none) \
         shared(count, m, out, v1, v2)
 {
@@ -72,6 +77,15 @@ void CCsum021(double *out, double *v1, double *v2, int count, int m)
                 } }
         }
 }
+#else
+        mkl_domatadd_batch_strided(
+                'R', 'N', 'T', m, m,
+                1.0, v1, m, m * m,
+                1.0, v2, m, m * m,
+                out, m, m * m,
+                count
+        );
+#endif
 }
 
 /*
@@ -80,6 +94,7 @@ void CCsum021(double *out, double *v1, double *v2, int count, int m)
 void CCmake_021(double *out, double *v1, double *v2, int count, int m,
                 double a, double b)
 {
+#ifndef PYSCF_USE_MKL
         if (a == 1 && b == 1) {
                 return CCsum021(out, v1, v2, count, m);
         }
@@ -101,6 +116,15 @@ void CCmake_021(double *out, double *v1, double *v2, int count, int m,
                 } }
         }
 }
+#else
+        mkl_domatadd_batch_strided(
+                'R', 'N', 'T', m, m,
+                a, v1, m, m * m,
+                b, v2, m, m * m,
+                out, m, m * m,
+                count
+        );
+#endif
 }
 
 /*
@@ -151,9 +175,15 @@ void CCload_eri(double *out, double *eri, int *orbs_slice, int nao)
 #pragma omp parallel default(none) \
         shared(out, eri, i1, j1, ni, nj, nn, nao, nao_pair)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int i, j, k, l, ij;
         double *pout;
-        double *buf = malloc(sizeof(double) * nao*nao);
+
+#ifndef PYSCF_USE_MKL
+        double *buf = pyscf_malloc(sizeof(double) * nao*nao);
+
 #pragma omp for schedule (static)
         for (ij = 0; ij < ni*nj; ij++) {
                 i = ij / nj;
@@ -165,7 +195,21 @@ void CCload_eri(double *out, double *eri, int *orbs_slice, int nao)
                         pout[k*nn+l] = buf[k*nao+l];
                 } }
         }
-        free(buf);
+        pyscf_free(buf);
+
+#else
+
+#pragma omp for schedule(static)
+        for (ij = 0; ij < ni*nj; ij++) {
+                i = ij / nj;
+                j = ij % nj;
+                pout = out + (i*nn+j)*nao;
+                LAPACKE_mkl_dtpunpack(LAPACK_ROW_MAJOR, 'L', 'N', nao, eri+ij*nao_pair, 1, 1, nao, nao, pout, nn);
+                LAPACKE_mkl_dtpunpack(LAPACK_ROW_MAJOR, 'L', 'T', nao, eri+ij*nao_pair, 1, 1, nao, nao, pout, nn);
+        }
+
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -188,7 +232,7 @@ void CCsd_sort_inplace(double *eri, int nocc, int nvir, int count)
         size_t nocc_pair = nocc * (nocc+1) /2;
         size_t nvir_pair = nvir * (nvir+1) /2;
         double *peri, *pout;
-        double *buf = malloc(sizeof(double) * nocc*nvir);
+        double *buf = pyscf_malloc(sizeof(double) * nocc*nvir);
 #pragma omp for schedule (static)
         for (ic = 0; ic < count; ic++) {
                 peri = eri + ic*nmo_pair + nvir_pair;
@@ -207,7 +251,7 @@ void CCsd_sort_inplace(double *eri, int nocc, int nvir, int count)
                 pout = eri + ic*nmo_pair + nvir_pair + nocc_pair;
                 NPdcopy(pout, buf, nocc*nvir);
         }
-        free(buf);
+        pyscf_free(buf);
 }
 }
 

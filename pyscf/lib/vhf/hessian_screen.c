@@ -78,17 +78,21 @@ void CVHFnr_int2e_pp_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
 #pragma omp parallel \
         shared(intor, cintopt, ao_loc, atm, natm, bas, nbas, env)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         double qtmp;
         int i, j, iijj, di, dj, ish, jsh;
         size_t ij;
         int shls[4];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
         di = 0;
         for (ish = 0; ish < nbas; ish++) {
                 dj = ao_loc[ish+1] - ao_loc[ish];
                 di = MAX(di, dj);
         }
-        double *buf = malloc(sizeof(double) * 9 * di*di*di*di);
+        double *buf = pyscf_malloc(sizeof(double) * 9 * di*di*di*di);
         double *bufx = buf;
         double *bufy, *bufz;
 #pragma omp for schedule(dynamic, 4)
@@ -117,8 +121,12 @@ void CVHFnr_int2e_pp_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
                 }
                 q_cond[ish*nbas+jsh] = qtmp;
         }
-        free(buf);
-        free(cache);
+        pyscf_free(buf);
+        pyscf_free(cache);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -127,13 +135,13 @@ void CVHFgrad_jk_direct_scf(CVHFOpt *opt, int (*intor)(), CINTOpt *cintopt,
                             int *bas, int nbas, double *env)
 {
         if (opt->q_cond != NULL) {
-                free(opt->q_cond);
+                pyscf_free(opt->q_cond);
         }
         nbas = opt->nbas;
         size_t Nbas = nbas;
         size_t Nbas2 = Nbas * Nbas;
         // First n*n elements for derivatives, the next n*n elements for regular ERIs
-        opt->q_cond = (double *)malloc(sizeof(double) * Nbas2*2);
+        opt->q_cond = (double *)pyscf_malloc(sizeof(double) * Nbas2*2);
 
         if (ao_loc[nbas] == CINTtot_cgto_spheric(bas, nbas)) {
                 CVHFnr_int2e_q_cond(int2e_sph, NULL, opt->q_cond+Nbas2, ao_loc,
@@ -150,10 +158,10 @@ void CVHFgrad_jk_direct_scf_dm(CVHFOpt *opt, double *dm, int nset, int *ao_loc,
                                int *atm, int natm, int *bas, int nbas, double *env)
 {
         if (opt->dm_cond != NULL) {
-                free(opt->dm_cond);
+                pyscf_free(opt->dm_cond);
         }
         nbas = opt->nbas;
-        opt->dm_cond = (double *)malloc(sizeof(double) * nbas*nbas);
+        opt->dm_cond = (double *)pyscf_malloc(sizeof(double) * nbas*nbas);
         CVHFnr_dm_cond1(opt->dm_cond, dm, nset, ao_loc, atm, natm, bas, nbas, env);
 }
 
@@ -246,17 +254,21 @@ void CVHFnr_int2e_pppp_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
 #pragma omp parallel \
         shared(intor, cintopt, ao_loc, atm, natm, bas, nbas, env)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         double qtmp;
         int i, j, iijj, di, dj, ish, jsh;
         size_t ij;
         int shls[4];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
         di = 0;
         for (ish = 0; ish < nbas; ish++) {
                 dj = ao_loc[ish+1] - ao_loc[ish];
                 di = MAX(di, dj);
         }
-        double *buf = malloc(sizeof(double) * 256 * di*di*di*di);
+        double *buf = pyscf_malloc(sizeof(double) * 256 * di*di*di*di);
         double *bufxx = buf;
         double *bufxy, *bufxz, *bufyx, *bufyy, *bufyz, *bufzx, *bufzy, *bufzz;
 #pragma omp for schedule(dynamic, 4)
@@ -298,8 +310,12 @@ void CVHFnr_int2e_pppp_q_cond(int (*intor)(), CINTOpt *cintopt, double *q_cond,
                 }
                 q_cond[ish*nbas+jsh] = qtmp;
         }
-        free(buf);
-        free(cache);
+        pyscf_free(buf);
+        pyscf_free(cache);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -308,13 +324,13 @@ void CVHFipip1_direct_scf(CVHFOpt *opt, int (*intor)(), CINTOpt *cintopt,
                           int *bas, int nbas, double *env)
 {
         if (opt->q_cond != NULL) {
-                free(opt->q_cond);
+                pyscf_free(opt->q_cond);
         }
         nbas = opt->nbas;
         size_t Nbas = nbas;
         size_t Nbas2 = Nbas * Nbas;
         // First n*n elements for derivatives, the next n*n elements for regular ERIs
-        opt->q_cond = (double *)malloc(sizeof(double) * nbas*nbas*2);
+        opt->q_cond = (double *)pyscf_malloc(sizeof(double) * nbas*nbas*2);
 
         if (ao_loc[nbas] == CINTtot_cgto_spheric(bas, nbas)) {
                 CVHFnr_int2e_q_cond(int2e_sph, NULL, opt->q_cond+Nbas2, ao_loc,

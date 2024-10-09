@@ -21,6 +21,10 @@
 #include <fft.h>
 #include "config.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define BLKSIZE 128
 #define MAX(x, y) (((x) > (y)) ? (x) : (y))
 
@@ -136,6 +140,7 @@ void irfft(complex double* in, double* out, int* mesh, int rank)
 
 void _copy_d2z(double complex *out, const double *in, const size_t n)
 {
+#ifndef PYSCF_USE_MKL
 #pragma omp parallel
 {
     size_t i;
@@ -144,4 +149,11 @@ void _copy_d2z(double complex *out, const double *in, const size_t n)
         out[i] = in[i] + 0*_Complex_I;
     }
 }
+#else
+    int dynamic = mkl_get_dynamic();
+    mkl_set_dynamic(1);
+    LAPACKE_zlacp2(LAPACK_COL_MAJOR, 'A', n, 1, in, n,
+                    (lapack_complex_double*) out, n);
+    mkl_set_dynamic(dynamic);
+#endif
 }

@@ -31,6 +31,10 @@
 #include "vhf/nr_direct.h"
 #include "nr_ao2mo.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define MIN(X,Y)        ((X) < (Y) ? (X) : (Y))
 #define MAX(X,Y)        ((X) > (Y) ? (X) : (Y))
 // 9f or 7g or 5h functions should be enough
@@ -120,7 +124,6 @@ void AO2MOdtriumm_o1(int m, int n, int k, int diag_off,
 
         dgemm_(&TRANS_T, &TRANS_N, &mstart, &n, &k,
                &D1, a, &k, b, &k, &D0, c, &m);
-
         for (; mstart < m; mstart+=BLK, nstart+=BLK) {
                 nleft = n - nstart;
 
@@ -260,15 +263,32 @@ int AO2MOmmm_nr_s2_s2(double *vout, double *eri, double *buf,
         dsymm_(&SIDE_L, &UPLO_U, &nao, &i_count,
                &D1, eri, &nao, mo_coeff+i_start*nao, &nao,
                &D0, buf, &nao);
+
+
+#ifndef PYSCF_USE_MKL
         AO2MOdtriumm_o1(j_count, i_count, nao, 0,
                         mo_coeff+j_start*nao, buf, buf1);
-
         for (i = 0, ij = 0; i < i_count; i++) {
                 for (j = 0; j <= i; j++, ij++) {
                         vout[ij] = buf1[j];
                 }
                 buf1 += j_count;
         }
+#else
+        if (i_count != j_count) {
+                AO2MOdtriumm_o1(j_count, i_count, nao, 0,
+                        mo_coeff+j_start*nao, buf, buf1);
+        } else {
+                cblas_dgemmt(
+                        CblasColMajor, CblasUpper, CblasTrans, CblasNoTrans,
+                        j_count, nao,
+                        1.0, mo_coeff+j_start*nao, nao,
+                        buf, nao,
+                        0.0, buf1, j_count
+                );
+        }
+        LAPACKE_dtrttp(LAPACK_COL_MAJOR, 'U', i_count, buf1, j_count, vout);
+#endif
         return 0;
 }
 
@@ -441,12 +461,17 @@ int AO2MOmmm_ket_nr_s2(double *vout, double *vin, double *buf,
         dsymm_(&SIDE_L, &UPLO_U, &nao, &j_count,
                &D1, vin, &nao, mo_coeff+j_start*nao, &nao,
                &D0, buf, &nao);
+
+#ifndef PYSCF_USE_MKL
         for (j = 0; j < nao; j++) {
                 for (i = 0; i < j_count; i++) {
                         vout[i] = buf[i*nao+j];
                 }
                 vout += j_count;
         }
+#else
+        mkl_domatcopy('R', 'T', j_count, nao, 1.0, buf, nao, vout, j_count);
+#endif
         return 0;
 }
 
@@ -1223,9 +1248,9 @@ void AO2MOnr_e1_drv(int (*intor)(), void (*fill)(), void (*ftrans)(), int (*fmmm
                     int *atm, int natm, int *bas, int nbas, double *env)
 {
         int nao = ao_loc[nbas];
-        double *eri_ao = malloc(sizeof(double) * nao*nao*nkl*ncomp);
+        double *eri_ao = pyscf_malloc(sizeof(double) * nao*nao*nkl*ncomp);
         if (eri_ao == NULL) {
-                fprintf(stderr, "malloc(%zu) failed in AO2MOnr_e1_drv\n",
+                fprintf(stderr, "pyscf_malloc(%zu) failed in AO2MOnr_e1_drv\n",
                         sizeof(double) * nao*nao*nkl*ncomp);
                 exit(1);
         }
@@ -1234,7 +1259,7 @@ void AO2MOnr_e1_drv(int (*intor)(), void (*fill)(), void (*ftrans)(), int (*fmmm
                            atm, natm, bas, nbas, env);
         AO2MOnr_e2_drv(ftrans, fmmm, eri, eri_ao, mo_coeff,
                        nkl*ncomp, nao, orbs_slice, ao_loc, nbas);
-        free(eri_ao);
+        pyscf_free(eri_ao);
 }
 
 void AO2MOnr_e2_drv(void (*ftrans)(), int (*fmmm)(),
@@ -1254,15 +1279,21 @@ void AO2MOnr_e2_drv(void (*ftrans)(), int (*fmmm)(),
 #pragma omp parallel default(none) \
         shared(ftrans, fmmm, vout, vin, nij, envs, nao, orbs_slice)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int i;
         int i_count = envs.bra_count;
         int j_count = envs.ket_count;
-        double *buf = malloc(sizeof(double) * (nao+i_count) * (nao+j_count));
+        double *buf = pyscf_malloc(sizeof(double) * (nao+i_count) * (nao+j_count));
 #pragma omp for schedule(dynamic)
         for (i = 0; i < nij; i++) {
                 (*ftrans)(fmmm, i, vout, vin, buf, &envs);
         }
-        free(buf);
+        pyscf_free(buf);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -1294,13 +1325,19 @@ void AO2MOnr_e1fill_drv(int (*intor)(), void (*fill)(), double *eri,
 #pragma omp parallel default(none) \
         shared(fill, fprescreen, eri, envs, intor, nkl, nbas, dmax, ncomp)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
         int ish;
-        double *buf = malloc(sizeof(double)*dmax*dmax*dmax*dmax*ncomp);
+        double *buf = pyscf_malloc(sizeof(double)*dmax*dmax*dmax*dmax*ncomp);
 #pragma omp for schedule(dynamic, 1)
         for (ish = 0; ish < nbas; ish++) {
                 (*fill)(intor, fprescreen, eri, buf, nkl, ish, &envs);
         }
-        free(buf);
+        pyscf_free(buf);
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 

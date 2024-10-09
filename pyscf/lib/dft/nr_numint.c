@@ -24,6 +24,10 @@
 #include "np_helper/np_helper.h"
 #include "vhf/fblas.h"
 
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
+
 #define BOXSIZE         56
 
 int VXCao_empty_blocks(int8_t *empty, uint8_t *non0table, int *shls_slice,
@@ -109,6 +113,10 @@ void VXCdot_ao_dm(double *vm, double *ao, double *dm,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ip, ib;
 #pragma omp for nowait schedule(static)
         for (ib = 0; ib < nblk; ib++) {
@@ -117,6 +125,10 @@ void VXCdot_ao_dm(double *vm, double *ao, double *dm,
                           nao, nocc, ngrids, MIN(ngrids-ip, BLKSIZE),
                           non0table+ib*nbas, shls_slice, ao_loc);
         }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -173,8 +185,12 @@ void VXCdot_ao_ao(double *vv, double *ao1, double *ao2,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int ip, ib;
-        double *v_priv = calloc(Nao*Nao+2, sizeof(double));
+        double *v_priv = pyscf_calloc(Nao*Nao+2, sizeof(double));
 #pragma omp for nowait schedule(static)
         for (ib = 0; ib < nblk; ib++) {
                 ip = ib * BLKSIZE;
@@ -188,7 +204,11 @@ void VXCdot_ao_ao(double *vv, double *ao1, double *ao2,
                         vv[ip] += v_priv[ip];
                 }
         }
-        free(v_priv);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
+        pyscf_free(v_priv);
 }
         if (hermi != 0) {
                 NPdsymm_triu(nao, vv, hermi);
@@ -277,6 +297,7 @@ void VXC_vv10nlc(double *Fvec, double *Uvec, double *Wvec,
                 Uvec[i] = U;
                 Wvec[i] = W;
         }
+
 }
 }
 
@@ -312,5 +333,6 @@ void VXC_vv10nlc_grad(double *Fvec, double *vvcoords, double *coords,
                 Fvec[i*3+1] = FY * -3;
                 Fvec[i*3+2] = FZ * -3;
         }
+
 }
 }

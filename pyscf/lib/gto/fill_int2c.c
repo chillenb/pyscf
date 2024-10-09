@@ -48,10 +48,14 @@ void GTOint2c(int (*intor)(), double *mat, int comp, int hermi,
                                                  atm, natm, bas, nbas, env);
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int dims[] = {naoi, naoj};
         int ish, jsh, ij, i0, j0;
         int shls[2];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < nish*njsh; ij++) {
                 ish = ij / njsh;
@@ -70,7 +74,11 @@ void GTOint2c(int (*intor)(), double *mat, int comp, int hermi,
                 (*intor)(mat+j0*naoi+i0, dims, shls,
                          atm, natm, bas, nbas, env, opt, cache);
         }
-        free(cache);
+        pyscf_free(cache);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
         if (hermi != PLAIN) { // lower triangle of F-array
                 int ic;
@@ -97,10 +105,14 @@ void GTOint2c_spinor(int (*intor)(), double complex *mat, int comp, int hermi,
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int dims[] = {naoi, naoj};
         int ish, jsh, ij, i0, j0;
         int shls[2];
-        double *cache = malloc(sizeof(double) * cache_size);
+        double *cache = pyscf_malloc(sizeof(double) * cache_size);
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < nish*njsh; ij++) {
                 ish = ij / njsh;
@@ -118,7 +130,11 @@ void GTOint2c_spinor(int (*intor)(), double complex *mat, int comp, int hermi,
                 (*intor)(mat+j0*naoi+i0, dims, shls,
                          atm, natm, bas, nbas, env, opt, cache);
         }
-        free(cache);
+        pyscf_free(cache);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
         if (hermi != PLAIN) {
                 int ic;
@@ -152,7 +168,7 @@ static void _set_log_max_coeff(double **log_max_coeff,
                 tot_prim += bas(NPRIM_OF, i);
         }
 
-        double *plog_maxc = malloc(sizeof(double) * (tot_prim+1));
+        double *plog_maxc = pyscf_malloc(sizeof(double) * (tot_prim+1));
         log_max_coeff[0] = plog_maxc;
         for (i = 0; i < nbas; i++) {
                 iprim = bas(NPRIM_OF, i);
@@ -172,7 +188,7 @@ void GTOoverlap_cond(double *cond, int *shls_slice,
         int jsh0 = shls_slice[2];
         int jsh1 = shls_slice[3];
         int njsh = jsh1 - jsh0;
-        double **log_max_coeff = malloc(sizeof(double *) * (nbas + 1));
+        double **log_max_coeff = pyscf_malloc(sizeof(double *) * (nbas + 1));
         _set_log_max_coeff(log_max_coeff, atm, natm, bas, nbas, env);
 #pragma omp parallel
 {
@@ -212,6 +228,6 @@ void GTOoverlap_cond(double *cond, int *shls_slice,
                 cond[(ish-ish0)*njsh+(jsh-jsh0)] = min_cceij;
         } }
 }
-        free(log_max_coeff[0]);
-        free(log_max_coeff);
+        pyscf_free(log_max_coeff[0]);
+        pyscf_free(log_max_coeff);
 }

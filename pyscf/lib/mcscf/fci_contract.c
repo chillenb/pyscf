@@ -199,7 +199,7 @@ void FCIcontract_a_1e(double *f1e_tril, double *ci0, double *ci1,
         double *pci0, *pci1;
         double tmp;
         _LinkTrilT *tab;
-        _LinkTrilT *clink = malloc(sizeof(_LinkTrilT) * nlinka * nstra);
+        _LinkTrilT *clink = pyscf_malloc(sizeof(_LinkTrilT) * nlinka * nstra);
         FCIcompress_link_tril(clink, link_indexa, nstra, nlinka);
 
         for (str0 = 0; str0 < nstra; str0++) {
@@ -216,7 +216,7 @@ void FCIcontract_a_1e(double *f1e_tril, double *ci0, double *ci1,
                         }
                 }
         }
-        free(clink);
+        pyscf_free(clink);
 }
 
 /*
@@ -231,7 +231,7 @@ void FCIcontract_b_1e(double *f1e_tril, double *ci0, double *ci1,
         double *pci1;
         double tmp;
         _LinkTrilT *tab;
-        _LinkTrilT *clink = malloc(sizeof(_LinkTrilT) * nlinkb * nstrb);
+        _LinkTrilT *clink = pyscf_malloc(sizeof(_LinkTrilT) * nlinkb * nstrb);
         FCIcompress_link_tril(clink, link_indexb, nstrb, nlinkb);
 
         for (str0 = 0; str0 < nstra; str0++) {
@@ -247,7 +247,7 @@ void FCIcontract_b_1e(double *f1e_tril, double *ci0, double *ci1,
                         }
                 }
         }
-        free(clink);
+        pyscf_free(clink);
 }
 
 void FCIcontract_1e_spin0(double *f1e_tril, double *ci0, double *ci1,
@@ -363,21 +363,25 @@ static void _reduce(double *out, double **in, size_t count, size_t no, size_t ni
 void FCIcontract_2e_spin0(double *eri, double *ci0, double *ci1,
                           int norb, int na, int nlink, int *link_index)
 {
-        _LinkTrilT *clink = malloc(sizeof(_LinkTrilT) * nlink * na);
+        _LinkTrilT *clink = pyscf_malloc(sizeof(_LinkTrilT) * nlink * na);
         FCIcompress_link_tril(clink, link_index, na, nlink);
 
         NPdset0(ci1, ((size_t)na) * na);
         double *ci1bufs[MAX_THREADS];
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int strk, ib;
         size_t blen;
         int nnorb = norb*(norb+1)/2;
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*nnorb*2+2));
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*nnorb*2+2));
         double *tmp;
         double *t1 = t1buf;
         double *vt1 = t1buf + nnorb*STRB_BLKSIZE;
-        double *ci1buf = malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
+        double *ci1buf = pyscf_malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
         ci1bufs[omp_get_thread_num()] = ci1buf;
         for (ib = 0; ib < na; ib += STRB_BLKSIZE) {
                 blen = MIN(STRB_BLKSIZE, na-ib);
@@ -401,10 +405,14 @@ void FCIcontract_2e_spin0(double *eri, double *ci0, double *ci1,
 // occur race condition between FCIaxpy2d and ctr_rhf2e_kern
 #pragma omp barrier
         }
-        free(ci1buf);
-        free(t1buf);
+        pyscf_free(ci1buf);
+        pyscf_free(t1buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clink);
+        pyscf_free(clink);
 }
 
 
@@ -412,8 +420,8 @@ void FCIcontract_2e_spin1(double *eri, double *ci0, double *ci1,
                           int norb, int na, int nb, int nlinka, int nlinkb,
                           int *link_indexa, int *link_indexb)
 {
-        _LinkTrilT *clinka = malloc(sizeof(_LinkTrilT) * nlinka * na);
-        _LinkTrilT *clinkb = malloc(sizeof(_LinkTrilT) * nlinkb * nb);
+        _LinkTrilT *clinka = pyscf_malloc(sizeof(_LinkTrilT) * nlinka * na);
+        _LinkTrilT *clinkb = pyscf_malloc(sizeof(_LinkTrilT) * nlinkb * nb);
         FCIcompress_link_tril(clinka, link_indexa, na, nlinka);
         FCIcompress_link_tril(clinkb, link_indexb, nb, nlinkb);
 
@@ -421,14 +429,18 @@ void FCIcontract_2e_spin1(double *eri, double *ci0, double *ci1,
         double *ci1bufs[MAX_THREADS];
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int strk, ib;
         size_t blen;
         int nnorb = norb*(norb+1)/2;
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*nnorb*2+2));
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*nnorb*2+2));
         double *tmp;
         double *t1 = t1buf;
         double *vt1 = t1buf + nnorb*STRB_BLKSIZE;
-        double *ci1buf = malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
+        double *ci1buf = pyscf_malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
         ci1bufs[omp_get_thread_num()] = ci1buf;
         for (ib = 0; ib < nb; ib += STRB_BLKSIZE) {
                 blen = MIN(STRB_BLKSIZE, nb-ib);
@@ -450,11 +462,15 @@ void FCIcontract_2e_spin1(double *eri, double *ci0, double *ci1,
 // occur race condition between FCIaxpy2d and ctr_rhf2e_kern
 #pragma omp barrier
         }
-        free(ci1buf);
-        free(t1buf);
+        pyscf_free(ci1buf);
+        pyscf_free(t1buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clinka);
-        free(clinkb);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
 }
 
 
@@ -506,8 +522,8 @@ void FCIcontract_uhf2e(double *eri_aa, double *eri_ab, double *eri_bb,
                        int norb, int na, int nb, int nlinka, int nlinkb,
                        int *link_indexa, int *link_indexb)
 {
-        _LinkTrilT *clinka = malloc(sizeof(_LinkTrilT) * nlinka * na);
-        _LinkTrilT *clinkb = malloc(sizeof(_LinkTrilT) * nlinkb * nb);
+        _LinkTrilT *clinka = pyscf_malloc(sizeof(_LinkTrilT) * nlinka * na);
+        _LinkTrilT *clinkb = pyscf_malloc(sizeof(_LinkTrilT) * nlinkb * nb);
         FCIcompress_link_tril(clinka, link_indexa, na, nlinka);
         FCIcompress_link_tril(clinkb, link_indexb, nb, nlinkb);
 
@@ -515,10 +531,14 @@ void FCIcontract_uhf2e(double *eri_aa, double *eri_ab, double *eri_bb,
         double *ci1bufs[MAX_THREADS];
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int strk, ib;
         size_t blen;
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)*2+2));
-        double *ci1buf = malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)*2+2));
+        double *ci1buf = pyscf_malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
         ci1bufs[omp_get_thread_num()] = ci1buf;
         for (ib = 0; ib < nb; ib += STRB_BLKSIZE) {
                 blen = MIN(STRB_BLKSIZE, nb-ib);
@@ -539,11 +559,15 @@ void FCIcontract_uhf2e(double *eri_aa, double *eri_ab, double *eri_bb,
 // occur race condition between FCIaxpy2d and ctr_uhf2e_kern
 #pragma omp barrier
         }
-        free(t1buf);
-        free(ci1buf);
+        pyscf_free(t1buf);
+        pyscf_free(ci1buf);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(clinka);
-        free(clinkb);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
 }
 
 
@@ -560,6 +584,10 @@ void FCImake_hdiag_uhf(double *hdiag, double *h1e_a, double *h1e_b,
 {
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int j, j0, k0, jk, jk0;
         size_t ia, ib;
         double e1, e2;
@@ -596,6 +624,10 @@ void FCImake_hdiag_uhf(double *hdiag, double *h1e_a, double *h1e_b,
                         hdiag[ia*nstrb+ib] = e1 + e2 * .5;
                 }
         }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -641,6 +673,10 @@ void FCIpspace_h0tril_uhf(double *h0, double *h1e_a, double *h1e_b,
         const int d3 = norb * norb * norb;
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
         int i, j, k, pi, pj, pk, pl;
         int n1da, n1db;
         uint64_t da, db, str1;
@@ -736,6 +772,10 @@ void FCIpspace_h0tril_uhf(double *h0, double *h1e_a, double *h1e_b,
                         } break;
                 }
         } }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -871,7 +911,7 @@ void FCIcontract_2e_symm1(double *eris, double *ci0, double *ci1,
         int i;
         int na = 0;
         int nb = 0;
-        int *linka_loc = malloc(sizeof(int) * (nirreps*4+4));
+        int *linka_loc = pyscf_malloc(sizeof(int) * (nirreps*4+4));
         int *linkb_loc = linka_loc + nirreps + 1;
         int *eris_loc = linkb_loc + nirreps + 1;
         int *ci_loc = eris_loc + nirreps + 1;
@@ -891,10 +931,14 @@ void FCIcontract_2e_symm1(double *eris, double *ci0, double *ci1,
         double *ci1bufs[MAX_THREADS];
 #pragma omp parallel
 {
-        _LinkTrilT *clinka = malloc(sizeof(_LinkTrilT) * nlinka * na);
-        _LinkTrilT *clinkb = malloc(sizeof(_LinkTrilT) * nlinkb * nb);
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)+2));
-        double *ci1buf = malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        _LinkTrilT *clinka = pyscf_malloc(sizeof(_LinkTrilT) * nlinka * na);
+        _LinkTrilT *clinkb = pyscf_malloc(sizeof(_LinkTrilT) * nlinkb * nb);
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)+2));
+        double *ci1buf = pyscf_malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
         ci1bufs[omp_get_thread_num()] = ci1buf;
 
         int ai_ir, t1_ir, intera_ir, interb_ir, stra_ir, strb_ir;
@@ -920,12 +964,16 @@ loop_c2e_symm(eris+eris_loc[ai_ir],
                         }
                 }
         } }
-        free(ci1buf);
-        free(t1buf);
-        free(clinka);
-        free(clinkb);
+        pyscf_free(ci1buf);
+        pyscf_free(t1buf);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(linka_loc);
+        pyscf_free(linka_loc);
 }
 
 #define IRREP_OF(l, g)  (l + max_momentum + (g) * ug_offsets)
@@ -941,7 +989,7 @@ void FCIcontract_2e_cyl_sym(double *eris, double *ci0, double *ci1,
         int i;
         int na = 0;
         int nb = 0;
-        int *linka_loc = malloc(sizeof(int) * (nirreps*4+4));
+        int *linka_loc = pyscf_malloc(sizeof(int) * (nirreps*4+4));
         int *linkb_loc = linka_loc + nirreps + 1;
         int *ci_loc = linkb_loc + nirreps + 1;
         int *eris_loc = ci_loc + nirreps + 1;
@@ -961,10 +1009,14 @@ void FCIcontract_2e_cyl_sym(double *eris, double *ci0, double *ci1,
         double *ci1bufs[MAX_THREADS];
 #pragma omp parallel
 {
-        _LinkTrilT *clinka = malloc(sizeof(_LinkTrilT) * nlinka * na);
-        _LinkTrilT *clinkb = malloc(sizeof(_LinkTrilT) * nlinkb * nb);
-        double *t1buf = malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)+2));
-        double *ci1buf = malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        _LinkTrilT *clinka = pyscf_malloc(sizeof(_LinkTrilT) * nlinka * na);
+        _LinkTrilT *clinkb = pyscf_malloc(sizeof(_LinkTrilT) * nlinkb * nb);
+        double *t1buf = pyscf_malloc(sizeof(double) * (STRB_BLKSIZE*norb*(norb+1)+2));
+        double *ci1buf = pyscf_malloc(sizeof(double) * (na*STRB_BLKSIZE+2));
         ci1bufs[omp_get_thread_num()] = ci1buf;
 
         int stra_l, strb_l, stra_g, strb_g;
@@ -1025,10 +1077,14 @@ loop_c2e_symm(eris+eris_loc[ai_ir],
                         } }
                 }
         } }
-        free(ci1buf);
-        free(t1buf);
-        free(clinka);
-        free(clinkb);
+        pyscf_free(ci1buf);
+        pyscf_free(t1buf);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(linka_loc);
+        pyscf_free(linka_loc);
 }

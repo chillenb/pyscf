@@ -15,6 +15,9 @@
 
 #include <stdlib.h>
 #include "np_helper/np_helper.h"
+#ifdef PYSCF_USE_MKL
+#include "mkl.h"
+#endif
 
 void NPdset0(double *p, const size_t n)
 {
@@ -46,4 +49,62 @@ void NPzcopy(double complex *out, const double complex *in, const size_t n)
         for (i = 0; i < n; i++) {
                 out[i] = in[i];
         }
+}
+
+int pyscf_has_mkl(void) {
+#ifdef PYSCF_USE_MKL
+        return 1;
+#else
+        return 0;
+#endif
+}
+
+void NPomp_dset0(double *p, const size_t n)
+{
+#ifndef PYSCF_USE_MKL
+#pragma omp parallel for
+        for (size_t i = 0; i < n; i++) {
+                p[i] = 0;
+        }
+#else
+        LAPACKE_dlaset(LAPACK_COL_MAJOR, 'A', n, 1, 0.0, 0.0, p, n);
+#endif
+}
+
+void NPomp_zset0(double complex *p, const size_t n)
+{
+#ifndef PYSCF_USE_MKL
+#pragma omp parallel for
+        for (size_t i = 0; i < n; i++) {
+                p[i] = 0;
+        }
+#else
+        MKL_Complex16 zero = {0.0, 0.0};
+        LAPACKE_zlaset(LAPACK_COL_MAJOR, 'A', n, 1, zero, zero, (MKL_Complex16*) p, n);
+#endif
+}
+
+void NPomp_dmul(double *A, double *B, double *out, size_t n)
+{
+#ifndef PYSCF_USE_MKL
+#pragma omp parallel for
+        for (size_t i = 0; i < n; i++) {
+                out[i] = A[i] * B[i];
+        }
+#else
+        vdMul(n, A, B, out);
+#endif
+}
+
+void NPomp_zmul(double complex *A, double complex *B, double complex *out, size_t n)
+{
+#ifndef PYSCF_USE_MKL
+        size_t i;
+#pragma omp parallel for
+        for (size_t i = 0; i < n; i++) {
+                out[i] = A[i] * B[i];
+        }
+#else
+        vzMul(n, (MKL_Complex16*) A, (MKL_Complex16*) B, (MKL_Complex16*) out);
+#endif
 }

@@ -43,7 +43,7 @@ static void rdm4_0b_t2(double *ci0, double *t2,
         const int nnorb = norb * norb;
         const size_t n4 = nnorb * nnorb;
         int i, j, k, l, a, sign, str1;
-        double *t1 = malloc(sizeof(double) * nb * nnorb);
+        double *t1 = pyscf_malloc(sizeof(double) * nb * nnorb);
         double *pt1, *pt2;
         _LinkT *tab;
 
@@ -53,6 +53,10 @@ static void rdm4_0b_t2(double *ci0, double *t2,
 
 #pragma omp parallel private(i, j, k, l, a, str1, sign, pt1, pt2, tab)
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
 #pragma omp for schedule(static, 1) nowait
         for (k = 0; k < bcount; k++) {
                 NPdset0(t2+k*n4, n4);
@@ -76,8 +80,12 @@ static void rdm4_0b_t2(double *ci0, double *t2,
                         }
                 }
         }
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
-        free(t1);
+        pyscf_free(t1);
 }
 /*
  * t2[:,i,j,k,l] = E^i_j E^k_l|ci0>
@@ -95,7 +103,11 @@ static void rdm4_a_t2(double *ci0, double *t2,
 
 #pragma omp parallel private(i, j, k, l, a, str1, sign, pt1, pt2)
 {
-        double *t1 = malloc(sizeof(double) * bcount * nnorb);
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        double *t1 = pyscf_malloc(sizeof(double) * bcount * nnorb);
 #pragma omp for schedule(static, 40)
         for (j = 0; j < nlinka; j++) {
                 a    = EXTRACT_CRE (tab[j]);
@@ -122,7 +134,11 @@ static void rdm4_a_t2(double *ci0, double *t2,
                         }
                 }
         }
-        free(t1);
+        pyscf_free(t1);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
 
@@ -213,7 +229,7 @@ static void make_rdm12_sf(double *rdm1, double *rdm2,
         const int nnorb = norb * norb;
         int k, l;
         size_t n;
-        double *tbra = malloc(sizeof(double) * nnorb * bcount);
+        double *tbra = pyscf_malloc(sizeof(double) * nnorb * bcount);
         double *pbra, *pt1;
 
         for (n = 0; n < bcount; n++) {
@@ -232,7 +248,7 @@ static void make_rdm12_sf(double *rdm1, double *rdm2,
         dgemv_(&TRANS_N, &nnorb, &bcount, &D1, t1ket, &nnorb,
                bra+stra_id*nb+strb_id, &INC1, &D1, rdm1, &INC1);
 
-        free(tbra);
+        pyscf_free(tbra);
 }
 
 static void make_rdm12_spin0(double *rdm1, double *rdm2,
@@ -247,7 +263,7 @@ static void make_rdm12_spin0(double *rdm1, double *rdm2,
         const int nnorb = norb * norb;
         int k, l;
         size_t n;
-        double *tbra = malloc(sizeof(double) * nnorb * bcount);
+        double *tbra = pyscf_malloc(sizeof(double) * nnorb * bcount);
         double *pbra, *pt1;
         double factor;
 
@@ -272,7 +288,7 @@ static void make_rdm12_spin0(double *rdm1, double *rdm2,
         dgemv_(&TRANS_N, &nnorb, &bcount, &D1, tbra, &nnorb,
                bra+stra_id*na+strb_id, &INC1, &D1, rdm1, &INC1);
 
-        free(tbra);
+        pyscf_free(tbra);
 }
 
 void FCI4pdm_kern_sf(double *rdm1, double *rdm2, double *rdm3, double *rdm4,
@@ -288,8 +304,8 @@ void FCI4pdm_kern_sf(double *rdm1, double *rdm2, double *rdm3, double *rdm4,
         int i, j, k, l, ij;
         size_t n;
         double *tbra;
-        double *t1bra = malloc(sizeof(double) * nnorb * bcount * 2);
-        double *t2bra = malloc(sizeof(double) * n4 * bcount * 2);
+        double *t1bra = pyscf_malloc(sizeof(double) * nnorb * bcount * 2);
+        double *t2bra = pyscf_malloc(sizeof(double) * n4 * bcount * 2);
         double *t1ket = t1bra + nnorb * bcount;
         double *t2ket = t2bra + n4 * bcount;
         double *pbra, *pt2;
@@ -311,7 +327,11 @@ void FCI4pdm_kern_sf(double *rdm1, double *rdm2, double *rdm3, double *rdm4,
 
 #pragma omp parallel private(ij, i, j, k, l, n, tbra, pbra, pt2)
 {
-        tbra = malloc(sizeof(double) * nnorb * bcount);
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        tbra = pyscf_malloc(sizeof(double) * nnorb * bcount);
 #pragma omp for schedule(static, 1) nowait
         for (ij = 0; ij < nnorb; ij++) { // loop ij for (<ket| E^j_i E^l_k)
                 for (n = 0; n < bcount; n++) {
@@ -333,13 +353,17 @@ void FCI4pdm_kern_sf(double *rdm1, double *rdm2, double *rdm3, double *rdm4,
                 tril2pdm_particle_symm(rdm3+(j*norb+i)*n4, tbra, t1ket,
                                        bcount, j+1, norb);
         }
-        free(tbra);
+        pyscf_free(tbra);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 
         make_rdm12_sf(rdm1, rdm2, bra, ket, t1bra, t1ket,
                       bcount, stra_id, strb_id, norb, na, nb);
-        free(t1bra);
-        free(t2bra);
+        pyscf_free(t1bra);
+        pyscf_free(t2bra);
 }
 
 /*
@@ -368,8 +392,8 @@ void FCI4pdm_kern_spin0(double *rdm1, double *rdm2, double *rdm3, double *rdm4,
         size_t n;
         double factor;
         double *tbra;
-        double *t1bra = malloc(sizeof(double) * nnorb * fill1 * 2);
-        double *t2bra = malloc(sizeof(double) * n4 * fill1 * 2);
+        double *t1bra = pyscf_malloc(sizeof(double) * nnorb * fill1 * 2);
+        double *t2bra = pyscf_malloc(sizeof(double) * n4 * fill1 * 2);
         double *t1ket = t1bra + nnorb * fill1;
         double *t2ket = t2bra + n4 * fill1;
         double *pbra, *pt2;
@@ -390,7 +414,11 @@ void FCI4pdm_kern_spin0(double *rdm1, double *rdm2, double *rdm3, double *rdm4,
 
 #pragma omp parallel private(ij, i, j, k, l, n, tbra, pbra, pt2, factor)
 {
-        tbra = malloc(sizeof(double) * nnorb * fill1);
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        tbra = pyscf_malloc(sizeof(double) * nnorb * fill1);
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < nnorb; ij++) { // loop ij for (<ket| E^j_i E^l_k)
                 i = ij / norb;
@@ -417,13 +445,17 @@ void FCI4pdm_kern_spin0(double *rdm1, double *rdm2, double *rdm3, double *rdm4,
                 tril2pdm_particle_symm(rdm3+(j*norb+i)*n4, tbra, t1ket,
                                        fill1, j+1, norb);
         }
-        free(tbra);
+        pyscf_free(tbra);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 
         make_rdm12_spin0(rdm1, rdm2, bra, ket, t1bra, t1ket,
                          fill1, stra_id, strb_id, norb, na, nb);
-        free(t1bra);
-        free(t2bra);
+        pyscf_free(t1bra);
+        pyscf_free(t2bra);
 }
 
 
@@ -442,8 +474,8 @@ void FCIrdm4_drv(void (*kernel)(),
         const size_t n4 = nnorb * nnorb;
         int ib, strk, bcount;
 
-        _LinkT *clinka = malloc(sizeof(_LinkT) * nlinka * na);
-        _LinkT *clinkb = malloc(sizeof(_LinkT) * nlinkb * nb);
+        _LinkT *clinka = pyscf_malloc(sizeof(_LinkT) * nlinka * na);
+        _LinkT *clinkb = pyscf_malloc(sizeof(_LinkT) * nlinkb * nb);
         FCIcompress_link(clinka, link_indexa, norb, na, nlinka);
         FCIcompress_link(clinkb, link_indexb, norb, nb, nlinkb);
         NPdset0(rdm1, nnorb);
@@ -459,8 +491,8 @@ void FCIrdm4_drv(void (*kernel)(),
                                   norb, na, nb, nlinka, nlinkb, clinka, clinkb);
                 }
         }
-        free(clinka);
-        free(clinkb);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
 }
 
 
@@ -476,9 +508,9 @@ void FCI3pdm_kern_sf(double *rdm1, double *rdm2, double *rdm3,
         int i, j, k, l, ij;
         size_t n;
         double *tbra;
-        double *t1bra = malloc(sizeof(double) * nnorb * bcount);
-        double *t1ket = malloc(sizeof(double) * nnorb * bcount);
-        double *t2bra = malloc(sizeof(double) * n4 * bcount);
+        double *t1bra = pyscf_malloc(sizeof(double) * nnorb * bcount);
+        double *t1ket = pyscf_malloc(sizeof(double) * nnorb * bcount);
+        double *t2bra = pyscf_malloc(sizeof(double) * n4 * bcount);
         double *pbra, *pt2;
 
         // t2[:,i,j,k,l] = E^i_j E^k_l|ket>
@@ -491,7 +523,11 @@ void FCI3pdm_kern_sf(double *rdm1, double *rdm2, double *rdm3,
 
 #pragma omp parallel private(ij, i, j, k, l, n, tbra, pbra, pt2)
 {
-        tbra = malloc(sizeof(double) * nnorb * bcount);
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        tbra = pyscf_malloc(sizeof(double) * nnorb * bcount);
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < nnorb; ij++) { // loop ij for (<ket| E^j_i E^l_k)
                 for (n = 0; n < bcount; n++) {
@@ -509,14 +545,18 @@ void FCI3pdm_kern_sf(double *rdm1, double *rdm2, double *rdm3,
                 tril2pdm_particle_symm(rdm3+(j*norb+i)*n4, tbra, t1ket,
                                        bcount, j+1, norb);
         }
-        free(tbra);
+        pyscf_free(tbra);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 
         make_rdm12_sf(rdm1, rdm2, bra, ket, t1bra, t1ket,
                       bcount, stra_id, strb_id, norb, na, nb);
-        free(t1bra);
-        free(t1ket);
-        free(t2bra);
+        pyscf_free(t1bra);
+        pyscf_free(t1ket);
+        pyscf_free(t2bra);
 }
 
 /*
@@ -544,9 +584,9 @@ void FCI3pdm_kern_spin0(double *rdm1, double *rdm2, double *rdm3,
         size_t n;
         double factor;
         double *tbra;
-        double *t1bra = malloc(sizeof(double) * nnorb * fill1);
-        double *t1ket = malloc(sizeof(double) * nnorb * fill1);
-        double *t2bra = malloc(sizeof(double) * n4 * fill1);
+        double *t1bra = pyscf_malloc(sizeof(double) * nnorb * fill1);
+        double *t1ket = pyscf_malloc(sizeof(double) * nnorb * fill1);
+        double *t2bra = pyscf_malloc(sizeof(double) * n4 * fill1);
         double *pbra, *pt2;
 
         // t2[:,i,j,k,l] = E^i_j E^k_l|ket>
@@ -559,7 +599,11 @@ void FCI3pdm_kern_spin0(double *rdm1, double *rdm2, double *rdm3,
 
 #pragma omp parallel private(ij, i, j, k, l, n, tbra, pbra, pt2, factor)
 {
-        tbra = malloc(sizeof(double) * nnorb * fill1);
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
+        tbra = pyscf_malloc(sizeof(double) * nnorb * fill1);
 #pragma omp for schedule(dynamic, 4)
         for (ij = 0; ij < nnorb; ij++) { // loop ij for (<ket| E^j_i E^l_k)
                 i = ij / norb;
@@ -582,13 +626,17 @@ void FCI3pdm_kern_spin0(double *rdm1, double *rdm2, double *rdm3,
                 tril2pdm_particle_symm(rdm3+(j*norb+i)*n4, tbra, t1ket,
                                        fill1, j+1, norb);
         }
-        free(tbra);
+        pyscf_free(tbra);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
         make_rdm12_spin0(rdm1, rdm2, bra, ket, t1bra, t1ket,
                          fill1, stra_id, strb_id, norb, na, nb);
-        free(t1bra);
-        free(t1ket);
-        free(t2bra);
+        pyscf_free(t1bra);
+        pyscf_free(t1ket);
+        pyscf_free(t2bra);
 }
 
 /*
@@ -606,8 +654,8 @@ void FCIrdm3_drv(void (*kernel)(),
         const size_t n4 = nnorb * nnorb;
         int ib, strk, bcount;
 
-        _LinkT *clinka = malloc(sizeof(_LinkT) * nlinka * na);
-        _LinkT *clinkb = malloc(sizeof(_LinkT) * nlinkb * nb);
+        _LinkT *clinka = pyscf_malloc(sizeof(_LinkT) * nlinka * na);
+        _LinkT *clinkb = pyscf_malloc(sizeof(_LinkT) * nlinkb * nb);
         FCIcompress_link(clinka, link_indexa, norb, na, nlinka);
         FCIcompress_link(clinkb, link_indexb, norb, nb, nlinkb);
         NPdset0(rdm1, nnorb);
@@ -622,7 +670,7 @@ void FCIrdm3_drv(void (*kernel)(),
                                   norb, na, nb, nlinka, nlinkb, clinka, clinkb);
                 }
         }
-        free(clinka);
-        free(clinkb);
+        pyscf_free(clinka);
+        pyscf_free(clinkb);
 }
 

@@ -86,6 +86,7 @@ static void fill_tril(double* mat, int comp, int* ish_ao_loc, int* jsh_ao_loc,
     double *pmat_up = mat + i0*((size_t)naoj) + j0;
     double *pmat_low = mat + j0*((size_t)naoj) + i0;
     int ic, i, j;
+#ifndef PYSCF_USE_MKL
     for (ic = 0; ic < comp; ic++) {
         for (i = 0; i < ni; i++) {
             for (j = 0; j < nj; j++) {
@@ -95,6 +96,13 @@ static void fill_tril(double* mat, int comp, int* ish_ao_loc, int* jsh_ao_loc,
         pmat_up += nao2;
         pmat_low += nao2;
     }
+#else
+    mkl_domatcopy_batch_strided(
+        'R', 'T', ni, nj,
+        1.0, pmat_up, naoj, nao2,
+        pmat_low, naoj, nao2, comp
+    );
+#endif
 }
 
 
@@ -1254,14 +1262,14 @@ void grid_integrate_drv(int (*eval_ints)(), double* mat, double* weights, TaskLi
         jsh_nctr_max = get_nctr_max(jsh0, jsh1, jsh_bas);
     }
 
-    double **gto_norm_i = (double**) malloc(sizeof(double*) * nish);
-    double **cart2sph_coeff_i = (double**) malloc(sizeof(double*) * nish);
+    double **gto_norm_i = (double**) pyscf_malloc(sizeof(double*) * nish);
+    double **cart2sph_coeff_i = (double**) pyscf_malloc(sizeof(double*) * nish);
     get_cart2sph_coeff(cart2sph_coeff_i, gto_norm_i, ish0, ish1, ish_bas, ish_env, cart);
     double **gto_norm_j = gto_norm_i;
     double **cart2sph_coeff_j = cart2sph_coeff_i;
     if (hermi != 1) {
-        gto_norm_j = (double**) malloc(sizeof(double*) * njsh);
-        cart2sph_coeff_j = (double**) malloc(sizeof(double*) * njsh);
+        gto_norm_j = (double**) pyscf_malloc(sizeof(double*) * njsh);
+        cart2sph_coeff_j = (double**) pyscf_malloc(sizeof(double*) * njsh);
         get_cart2sph_coeff(cart2sph_coeff_j, gto_norm_j, jsh0, jsh1, jsh_bas, jsh_env, cart);
     }
 
@@ -1275,11 +1283,15 @@ void grid_integrate_drv(int (*eval_ints)(), double* mat, double* weights, TaskLi
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
     int ish, jsh, itask, iblock;
     int li, lj, ish_nprim, jsh_nprim;
     PGFPair *pgfpair = NULL;
     double *ptr_gto_norm_i, *ptr_gto_norm_j;
-    double *cache0 = malloc(sizeof(double) * cache_size);
+    double *cache0 = pyscf_malloc(sizeof(double) * cache_size);
     double *dm_cart = cache0;
     int len_dm_cart = comp*ish_nprim_max*_LEN_CART[ish_lmax]*jsh_nprim_max*_LEN_CART[jsh_lmax];
     double *cache = dm_cart + len_dm_cart;
@@ -1313,11 +1325,15 @@ void grid_integrate_drv(int (*eval_ints)(), double* mat, double* weights, TaskLi
                       ish, jsh, ish0, jsh0, naoi, naoj);
         }
     }
-    free(cache0);
+    pyscf_free(cache0);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 
     if (task_loc) {
-        free(task_loc);
+        pyscf_free(task_loc);
     }
     del_cart2sph_coeff(cart2sph_coeff_i, gto_norm_i, ish0, ish1);
     if (hermi != 1) {
@@ -1337,10 +1353,14 @@ void int_gauss_charge_v_rs(int (*eval_ints)(), double* out, double* v_rs, int co
 
 #pragma omp parallel
 {
+#ifdef PYSCF_USE_MKL
+        int save = mkl_set_num_threads_local(1);
+#endif
+
     int ia, ib;
     double alpha, coeff, charge, rad, fac;
     double *r0;
-    double *cache = (double*) malloc(sizeof(double) * cache_size);
+    double *cache = (double*) pyscf_malloc(sizeof(double) * cache_size);
     #pragma omp for schedule(static)
     for (ib = 0; ib < nbas; ib++) {
         ia = bas[ib*BAS_SLOTS+ATOM_OF];
@@ -1353,6 +1373,10 @@ void int_gauss_charge_v_rs(int (*eval_ints)(), double* out, double* v_rs, int co
         (*eval_ints)(v_rs, out+ia*comp, comp, 0, 0, alpha, 0.0, r0, r0, 
                      fac, rad, dimension, dh, a, b, mesh, cache);
     }
-    free(cache);
+    pyscf_free(cache);
+
+#ifdef PYSCF_USE_MKL
+        mkl_set_num_threads_local(save);
+#endif
 }
 }
