@@ -535,10 +535,14 @@ def getints3c(intor_name, atm, bas, env, shls_slice=None, comp=1,
         naoi = ao_loc[i1] - ao_loc[i0]
         naoj = ao_loc[j1] - ao_loc[j0]
         shape = (naoi, naoj, naok, comp)
+    elif aosym in ('s2ij_forder',):
+        nij = ao_loc[i1]*(ao_loc[i1]+1)//2 - ao_loc[i0]*(ao_loc[i0]+1)//2
+        shape = (naok, nij, comp)
     else:
         aosym = 's2ij'
         nij = ao_loc[i1]*(ao_loc[i1]+1)//2 - ao_loc[i0]*(ao_loc[i0]+1)//2
         shape = (nij, naok, comp)
+
 
     if 'spinor' in intor_name:
         mat = numpy.ndarray(shape, numpy.complex128, out, order='F')

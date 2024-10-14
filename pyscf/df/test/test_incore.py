@@ -140,6 +140,16 @@ class KnownValues(unittest.TestCase):
         cderi1 = df.incore.cholesky_eri_debug(mol)
         self.assertAlmostEqual(abs(cderi-cderi1).max(), 0, 9)
 
+        cderi_F_order = df.incore.cholesky_eri(mol, order='F')
+        self.assertAlmostEqual(abs(cderi_F_order-cderi1).max(), 0, 9)
+
+        cderi_eig = df.incore.cholesky_eri(mol, decompose_j2c='eig')
+        cderi_eig_F_order = df.incore.cholesky_eri(mol, decompose_j2c='eig', order='F')
+        self.assertAlmostEqual(abs(cderi_eig-cderi_eig_F_order).max(), 0, 9)
+
+        eri_from_cderi_eig = numpy.einsum('pi,pk->ik', cderi_eig, cderi_eig)
+        self.assertAlmostEqual(abs(eri_from_cderi_eig-eri0).max(), 0, 9)
+
     def test_r_incore(self):
         j3c = df.r_incore.aux_e2(mol, auxmol, intor='int3c2e_spinor', aosym='s1')
         nao = mol.nao_2c()

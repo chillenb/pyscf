@@ -27,6 +27,7 @@
 
 /*
  * out[naoi,naoj,naok,comp] in F-order
+ * i.e. [comp, naok, naoj, naoi] in C-order
  */
 void GTOnr3c_fill_s1(int (*intor)(), double *out, double *buf,
                      int comp, int jobid,
@@ -115,6 +116,53 @@ static void dcopy_s2_ieqj(double *out, double *in, int comp,
                 in  += dij * dk;
         }
 }
+
+static void dcopy_s2_igtj_forder(double *out, double *in, int comp,
+                          int ip, int nij, int nk, int di, int dj, int dk)
+{
+        const size_t dij = di * dj;
+        const size_t ip1 = ip + 1;
+        const size_t nijk = nij * nk;
+        int i, j, k, ic;
+        double *pout, *pin;
+        for (ic = 0; ic < comp; ic++) {
+                pout = out + nijk * ic;
+                pin = in + dij * nk * ic;
+                for (i = 0; i < di; i++) {
+                        for (j = 0; j < dj; j++) {
+                                for (k = 0; k < dk; k++) {
+                                        pout[j*nk + k] = pin[k*dij + j*di + i];
+                                }
+                        }
+                        pout += nk * (ip1 + i);
+                };
+        }
+}
+
+static void dcopy_s2_ieqj_forder(double *out, double *in, int comp,
+                          int ip, int nij, int nk, int di, int dj, int dk)
+{
+        const size_t dij = di * dj;
+        const size_t ip1 = ip + 1;
+        const size_t nijk = nij * nk;
+        int i, j, k, ic;
+        double *pout, *pin;
+        for (ic = 0; ic < comp; ic++) {
+                pout = out + nijk * ic;
+                pin = in + dij * nk * ic;
+                for (i = 0; i < di; i++) {
+                        for (j = 0; j <= i; j++) {
+                                for (k = 0; k < dk; k++) {
+                                        pout[j*nk + k] = pin[k*dij + j*di + i];
+                                }
+                        }
+                        pout += nk * (ip1 + i);
+                }
+                out += nijk;
+                in  += dij * nk;
+        }
+}
+
 /*
  * out[comp,naok,nij] in C-order
  * nij = i1*(i1+1)/2 - i0*(i0+1)/2
@@ -184,6 +232,75 @@ void GTOnr3c_fill_s2ij(int (*intor)(), double *out, double *buf,
         } }
 }
 
+/*
+ * out[naok, nij, comp] in F-order
+ * nij = i1*(i1+1)/2 - i0*(i0+1)/2
+ *     [  \    ]
+ *     [****   ]
+ *     [*****  ]
+ *     [*****. ]  <= . may not be filled, if jsh-upper-bound < ish-upper-bound
+ *     [      \]
+ */
+void GTOnr3c_fill_s2ij_forder(int (*intor)(), double *out, double *buf,
+                       int comp, int jobid,
+                       int *shls_slice, int *ao_loc, CINTOpt *cintopt,
+                       int *atm, int natm, int *bas, int nbas, double *env)
+{
+        const int ish0 = shls_slice[0];
+        const int ish1 = shls_slice[1];
+        const int jsh0 = shls_slice[2];
+        const int jsh1 = shls_slice[3];
+        const int ksh0 = shls_slice[4];
+        const int ksh1 = shls_slice[5];
+        const int nksh = ksh1 - ksh0;
+
+        const int ksh = jobid % nksh + ksh0;
+        const int istart = jobid / nksh * BLKSIZE + ish0;
+        const int iend = MIN(istart + BLKSIZE, ish1);
+        if (istart >= iend) {
+                return;
+        }
+
+        const int i0 = ao_loc[ish0];
+        const int i1 = ao_loc[ish1];
+        const size_t naok = ao_loc[ksh1] - ao_loc[ksh0];
+        const size_t off = i0 * (i0 + 1) / 2;
+        const size_t nij = i1 * (i1 + 1) / 2 - off;
+        const size_t nijk = nij * naok;
+
+        const int dk = ao_loc[ksh+1] - ao_loc[ksh];
+        const int k0 = ao_loc[ksh] - ao_loc[ksh0];
+        const int nk = ao_loc[ksh1] - ao_loc[ksh0];
+
+        int ish, jsh, ip, jp, di, dj;
+        int shls[3] = {0, 0, ksh};
+        di = GTOmax_shell_dim(ao_loc, shls_slice, 2);
+        double *cache = buf + di * di * dk * comp;
+        double *pout;
+
+        for (ish = istart; ish < iend; ish++) {
+        for (jsh = jsh0; jsh < jsh1; jsh++) {
+                ip = ao_loc[ish];
+                jp = ao_loc[jsh] - ao_loc[jsh0];
+                if (ip < jp) {
+                        continue;
+                }
+                shls[0] = ish;
+                shls[1] = jsh;
+                di = ao_loc[ish+1] - ao_loc[ish];
+                dj = ao_loc[jsh+1] - ao_loc[jsh];
+
+                (*intor)(buf, NULL, shls, atm, natm, bas, nbas, env, cintopt, cache);
+
+                pout = out + nk * (ip * (ip + 1) / 2 - off + jp) + k0;
+                if (ip != jp) {
+                        dcopy_s2_igtj_forder(pout, buf, comp, ip, nij, nk, di, dj, dk);
+                } else {
+                        dcopy_s2_ieqj_forder(pout, buf, comp, ip, nij, nk, di, dj, dk);
+                }
+        } }
+}
+
 void GTOnr3c_fill_s2jk(int (*intor)(), double *out, double *buf,
                        int comp, int jobid,
                        int *shls_slice, int *ao_loc, CINTOpt *cintopt,
@@ -223,4 +340,3 @@ void GTOnr3c_drv(int (*intor)(), void (*fill)(), double *eri, int comp,
         free(buf);
 }
 }
-

@@ -124,13 +124,18 @@ def fill_2c2e(mol, auxmol_or_auxbasis, intor='int2c2e', comp=None, hermi=1, out=
 def cholesky_eri(mol, auxbasis='weigend+etb', auxmol=None,
                  int3c='int3c2e', aosym='s2ij', int2c='int2c2e', comp=1,
                  max_memory=MAX_MEMORY, decompose_j2c='cd',
-                 lindep=LINEAR_DEP_THR, verbose=0, fauxe2=aux_e2):
+                 lindep=LINEAR_DEP_THR, verbose=0, fauxe2=aux_e2, order='C'):
     '''
     Returns:
-        2D array of (naux,nao*(nao+1)/2) in C-contiguous
+        2D array of (naux,nao*(nao+1)/2) in C or F-contiguous format.
     '''
     from pyscf.df.outcore import _guess_shell_ranges
     assert (comp == 1)
+    assert order in ('C', 'F')
+    if order == 'F':
+        assert aosym == 's2ij', 'df.incore.cholesky_eri: F-order only compatible with s2ij'
+        aosym = 's2ij_forder'
+
     t0 = (logger.process_clock(), logger.perf_counter())
     log = logger.new_logger(mol, verbose)
     if auxmol is None:
@@ -162,7 +167,7 @@ def cholesky_eri(mol, auxbasis='weigend+etb', auxmol=None,
     else:
         nao_pair = nao * (nao+1) // 2
 
-    cderi = numpy.empty((naux, nao_pair))
+    cderi = numpy.empty((naux, nao_pair), order=order)
 
     max_words = max_memory*.98e6/8 - low.size - cderi.size
     # Divide by 3 because scipy.linalg.solve may create a temporary copy for
@@ -172,39 +177,54 @@ def cholesky_eri(mol, auxbasis='weigend+etb', auxmol=None,
     log.debug1('shranges = %s', shranges)
 
     cintopt = gto.moleintor.make_cintopt(atm, bas, env, int3c)
-    bufs1 = numpy.empty((comp*max([x[2] for x in shranges]),naoaux))
-    bufs2 = numpy.empty_like(bufs1)
 
-    p1 = 0
-    for istep, sh_range in enumerate(shranges):
+    if order == 'F' and decompose_j2c == 'cd':
+        # If the output CDERI is F-order, we can do it all in one go, since trsm operates in place.
+
+        shranges = _guess_shell_ranges(mol, cderi.size, aosym)
+        assert len(shranges) == 1
         log.debug('int3c2e [%d/%d], AO [%d:%d], nrow = %d',
-                  istep+1, len(shranges), *sh_range)
-        bstart, bend, nrow = sh_range
-        shls_slice = (bstart, bend, 0, mol.nbas, mol.nbas, mol.nbas+auxmol.nbas)
+                  1, 1, *shranges[0])
+        _, _, nrow = shranges[0]
+        shls_slice = (0, mol.nbas, 0, mol.nbas, mol.nbas, mol.nbas+auxmol.nbas)
         ints = gto.moleintor.getints3c(int3c, atm, bas, env, shls_slice, comp,
-                                       aosym, ao_loc, cintopt, out=bufs1)
+                                       aosym, ao_loc, cintopt, out=cderi)
+        ints = ints.reshape((naoaux,-1))
+        # ints is now F-contiguous (naoaux, nrow).
+        trsm, = scipy.linalg.get_blas_funcs(('trsm',), (low, ints))
+        cderi = scipy.linalg.solve_triangular(low, ints, lower=True, overwrite_b=True, check_finite=False)
+        # Done!
 
-        if ints.ndim == 3 and ints.flags.f_contiguous:
-            ints = lib.transpose(ints.T, axes=(0,2,1), out=bufs2).reshape(naoaux,-1)
-            bufs1, bufs2 = bufs2, bufs1
-        else:
-            ints = ints.reshape((-1,naoaux)).T
+    else: # order == 'C'
+        bufs1 = numpy.empty((comp*max([x[2] for x in shranges]),naoaux))
+        p1 = 0
+        for istep, sh_range in enumerate(shranges):
+            log.debug('int3c2e [%d/%d], AO [%d:%d], nrow = %d',
+                    istep+1, len(shranges), *sh_range)
+            bstart, bend, nrow = sh_range
+            shls_slice = (bstart, bend, 0, mol.nbas, mol.nbas, mol.nbas+auxmol.nbas)
+            ints = gto.moleintor.getints3c(int3c, atm, bas, env, shls_slice, comp,
+                                        aosym, ao_loc, cintopt, out=bufs1)
+            if order == 'C':
+                ints = ints.reshape((-1,naoaux)).T
+            else: # order == 'F'
+                ints = ints.reshape((naoaux,-1))
 
-        p0, p1 = p1, p1 + nrow
-        if decompose_j2c == 'cd':
-            if ints.flags.c_contiguous:
+            # ints is now {order}-contiguous (naoaux, nrow).
+            p0, p1 = p1, p1 + nrow
+            if decompose_j2c == 'cd':
+                # The cholesky F-order case is handled above.
+                # Need to use trsm with flags to handle cholesky C-order case.
+                assert ints.flags.c_contiguous
                 trsm, = scipy.linalg.get_blas_funcs(('trsm',), (low, ints))
                 dat = trsm(1.0, low, ints.T, lower=True, trans_a = 1, side = 1, overwrite_b=True).T
+                cderi[:,p0:p1] = dat
             else:
-                dat = scipy.linalg.solve_triangular(low, ints, lower=True,
-                                                   overwrite_b=True, check_finite=False)
-            if dat.flags.f_contiguous:
-                dat = lib.transpose(dat.T, out=bufs2)
-            cderi[:,p0:p1] = dat
-        else:
-            dat = numpy.ndarray((naux, ints.shape[1]), buffer=bufs2)
-            cderi[:,p0:p1] = lib.dot(low, ints, c=dat)
-        dat = ints = None
+                # decompose_j2c == 'eig'
+                # For both F and C order, the decomposition is done in the same way.
+                numpy.matmul(low, ints, out=cderi[:,p0:p1])
+
+
 
     log.timer('cholesky_eri', *t0)
     return cderi
