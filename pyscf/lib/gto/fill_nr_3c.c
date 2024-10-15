@@ -59,7 +59,6 @@ void GTOnr3c_fill_s1(int (*intor)(), double *out, double *buf,
 
         int ish, jsh, i0, j0;
         int shls[3] = {0, 0, ksh};
-
         for (jsh = jstart; jsh < jend; jsh++) {
         for (ish = ish0; ish < ish1; ish++) {
                 shls[0] = ish;
@@ -68,6 +67,59 @@ void GTOnr3c_fill_s1(int (*intor)(), double *out, double *buf,
                 j0 = ao_loc[jsh] - ao_loc[jsh0];
                 (*intor)(out+j0*naoi+i0, dims, shls, atm, natm, bas, nbas, env,
                          cintopt, buf);
+        } }
+}
+
+/*
+ * out[comp,naoi,naoj,naok] in C-order
+ * i.e. [naok, naoj, naoi, comp] in F-order
+ */
+void GTOnr3c_fill_s1_forder(int (*intor)(), double *out, double *buf,
+                     int comp, int jobid,
+                     int *shls_slice, int *ao_loc, CINTOpt *cintopt,
+                     int *atm, int natm, int *bas, int nbas, double *env)
+{
+        const int ish0 = shls_slice[0];
+        const int ish1 = shls_slice[1];
+        const int jsh0 = shls_slice[2];
+        const int jsh1 = shls_slice[3];
+        const int ksh0 = shls_slice[4];
+        const int ksh1 = shls_slice[5];
+        const int nksh = ksh1 - ksh0;
+
+        const int ksh = jobid % nksh + ksh0;
+        const int jstart = jobid / nksh * BLKSIZE + jsh0;
+        const int jend = MIN(jstart + BLKSIZE, jsh1);
+        if (jstart >= jend) {
+                return;
+        }
+
+        const size_t naoi = ao_loc[ish1] - ao_loc[ish0];
+        const size_t naoj = ao_loc[jsh1] - ao_loc[jsh0];
+        const size_t naok = ao_loc[ksh1] - ao_loc[ksh0];
+        const int dims[] = {naoi, naoj, naok};
+
+        const int k0 = ao_loc[ksh] - ao_loc[ksh0];
+        out += naoi * naoj * k0;
+
+        int ish, jsh, i0, j0;
+        int shls[3] = {0, 0, ksh};
+        int di = GTOmax_shell_dim(ao_loc, shls_slice, 2);
+        const int dk = ao_loc[ksh+1] - ao_loc[ksh];
+
+        double *cache = buf + di * di * dk * comp;
+        double *pout;
+
+        for (jsh = jstart; jsh < jend; jsh++) {
+        for (ish = ish0; ish < ish1; ish++) {
+                shls[0] = ish;
+                shls[1] = jsh;
+                i0 = ao_loc[ish] - ao_loc[ish0];
+                j0 = ao_loc[jsh] - ao_loc[jsh0];
+                (*intor)(buf, dims, shls, atm, natm, bas, nbas, env,
+                         cintopt, cache);
+                pout = out+j0*naoi+i0;
+                dcopy_s2_igtj_forder(pout, buf, comp, ip, nij, naok, di, dj, dk);
         } }
 }
 
@@ -158,8 +210,6 @@ static void dcopy_s2_ieqj_forder(double *out, double *in, int comp,
                         }
                         pout += nk * (ip1 + i);
                 }
-                out += nijk;
-                in  += dij * nk;
         }
 }
 
@@ -266,11 +316,9 @@ void GTOnr3c_fill_s2ij_forder(int (*intor)(), double *out, double *buf,
         const size_t naok = ao_loc[ksh1] - ao_loc[ksh0];
         const size_t off = i0 * (i0 + 1) / 2;
         const size_t nij = i1 * (i1 + 1) / 2 - off;
-        const size_t nijk = nij * naok;
 
         const int dk = ao_loc[ksh+1] - ao_loc[ksh];
         const int k0 = ao_loc[ksh] - ao_loc[ksh0];
-        const int nk = ao_loc[ksh1] - ao_loc[ksh0];
 
         int ish, jsh, ip, jp, di, dj;
         int shls[3] = {0, 0, ksh};
@@ -292,11 +340,11 @@ void GTOnr3c_fill_s2ij_forder(int (*intor)(), double *out, double *buf,
 
                 (*intor)(buf, NULL, shls, atm, natm, bas, nbas, env, cintopt, cache);
 
-                pout = out + nk * (ip * (ip + 1) / 2 - off + jp) + k0;
+                pout = out + naok * (ip * (ip + 1) / 2 - off + jp) + k0;
                 if (ip != jp) {
-                        dcopy_s2_igtj_forder(pout, buf, comp, ip, nij, nk, di, dj, dk);
+                        dcopy_s2_igtj_forder(pout, buf, comp, ip, nij, naok, di, dj, dk);
                 } else {
-                        dcopy_s2_ieqj_forder(pout, buf, comp, ip, nij, nk, di, dj, dk);
+                        dcopy_s2_ieqj_forder(pout, buf, comp, ip, nij, naok, di, dj, dk);
                 }
         } }
 }
