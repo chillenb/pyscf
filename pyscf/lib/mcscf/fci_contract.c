@@ -23,7 +23,7 @@
 #include <assert.h>
 
 #ifdef HAVE_FFS
-#define _DEFAULT_SOURCE
+#define _GNU_SOURCE
 #include <strings.h>
 #endif
 
