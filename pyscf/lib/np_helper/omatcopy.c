@@ -75,7 +75,7 @@ void NPomp_d_otranspose_scale(char trans, const int m, const int n, const double
 #pragma omp for schedule(static) collapse(2) nowait
       for(int ii = 0; ii < mtile_a * TILE_ROW; ii+=TILE_ROW) {
         for(int jj = 0; jj < ntile_a * TILE_COL; jj+=TILE_COL) {
-#pragma GCC unroll TILE_ROW
+#pragma GCC unroll 6
 #pragma GCC ivdep
           for(int i = ii; i < ii + TILE_ROW; i++) {
 #pragma omp simd
@@ -150,7 +150,7 @@ void NPomp_z_otranspose_scale(char trans, const int m, const int n,
 #pragma omp for schedule(static) collapse(2) nowait
       for(int ii = 0; ii < mtile_a * TILE_ROW_CPLX; ii+=TILE_ROW_CPLX) {
         for(int jj = 0; jj < ntile_a * TILE_COL_CPLX; jj+=TILE_COL_CPLX) {
-#pragma GCC unroll TILE_ROW_CPLX
+#pragma GCC unroll 4
 #pragma GCC ivdep
           for(int i = ii; i < ii + TILE_ROW_CPLX; i++) {
 #pragma omp simd
