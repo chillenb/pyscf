@@ -573,6 +573,59 @@ def inplace_transpose_scale(a, alpha=1.0):
         raise NotImplementedError
     return a
 
+def outplace_transpose_scale(a, b=None, trans=False, alpha=1.0):
+    """Parallel scaling and transposition of a matrix.
+    B <- alpha * op(A), where op(A) = A or A^T.
+
+    Parameters
+    ----------
+    a : ndarray
+        Row major array (m,n) to be scaled and transposed.
+        Does not need to be contiguous; lda can exceed n.
+    b : ndarray, optional
+        Output array, row major. If None, a new array is allocated.
+        The shape of b is (m,n) if trans is false or (n,m) otherwise.
+    trans : bool, optional
+        If True, transpose the matrix, by default False.
+    alpha : float, optional
+        scaling factor, by default 1.0
+    """
+    assert a.ndim == 2
+    astrides = [s // a.itemsize for s in a.strides]
+    assert astrides[1] == 1
+    lda = astrides[0]
+    m, n = a.shape
+    if trans:
+        bshape = (n, m)
+    else:
+        bshape = (m, n)
+    if b is None:
+        b = numpy.empty(bshape, dtype=a.dtype)
+    else:
+        assert not numpy.may_share_memory(a, b)
+    assert b.shape == bshape
+    bstrides = [s // b.itemsize for s in b.strides]
+    assert bstrides[1] == 1
+    ldb = bstrides[0]
+    trans_char = b'T' if trans else b'N'
+    if a.dtype == numpy.double:
+        _np_helper.NPomp_d_otranspose_scale(
+            ctypes.c_char(trans_char),
+            ctypes.c_int(m), ctypes.c_int(n), ctypes.c_double(alpha),
+            a.ctypes.data_as(ctypes.c_void_p), ctypes.c_int(lda),
+            b.ctypes.data_as(ctypes.c_void_p), ctypes.c_int(ldb)
+        )
+    elif a.dtype == numpy.complex128:
+        alpha_arr = numpy.array([alpha], dtype=numpy.complex128)
+        _np_helper.NPomp_z_otranspose_scale(
+            ctypes.c_char(trans_char),
+            ctypes.c_int(m), ctypes.c_int(n), alpha_arr.ctypes.data_as(ctypes.c_void_p),
+            a.ctypes.data_as(ctypes.c_void_p), ctypes.c_int(lda),
+            b.ctypes.data_as(ctypes.c_void_p), ctypes.c_int(ldb)
+        )
+    return b
+
+
 def transpose(a, axes=None, inplace=False, out=None):
     '''Transposing an array with better memory efficiency
 

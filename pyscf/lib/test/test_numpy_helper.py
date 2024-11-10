@@ -39,6 +39,20 @@ class KnownValues(unittest.TestCase):
         with lib.with_omp_threads(4):
             lib.transpose(a, axes=(0,2,1), inplace=True)
         self.assertAlmostEqual(abs(a - acopy.transpose(0,2,1)).max(), 0, 12)
+    def test_omatcopy(self):
+        for dt in ('d', 'z'):
+            a = numpy.random.random((400,500))
+            if dt == 'z':
+                a = a + a * 1j
+                alpha = 1.5 + 1.5j
+            else:
+                alpha = 1.5
+            b = numpy.empty_like(a)
+            lib.outplace_transpose_scale(a, b=b, alpha=alpha, trans=False)
+            self.assertAlmostEqual(abs(b - alpha * a).max(), 0, 12)
+            b = numpy.empty(a.T.shape, dtype=a.dtype)
+            lib.outplace_transpose_scale(a, b=b, alpha=alpha, trans=True)
+            self.assertAlmostEqual(abs(b - alpha * a.T).max(), 0, 12)
     def test_transpose(self):
         a = numpy.random.random((400,900))
         self.assertAlmostEqual(abs(a.T - lib.transpose(a)).max(), 0, 12)

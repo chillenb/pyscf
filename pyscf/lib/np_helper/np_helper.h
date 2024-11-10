@@ -49,6 +49,13 @@ void NPztranspose_021(int *shape, double complex *a, double complex *at);
 
 void NPomp_d_itranspose_scale(const int n, const double alpha, double *A, int lda);
 void NPomp_z_itranspose_scale(const int n, const double complex *alphaptr, double complex *A, int lda);
+void NPomp_d_otranspose_scale(char trans, const int m, const int n,
+                              const double alpha, double *A, const int lda,
+                              double *B, const int ldb);
+void NPomp_z_otranspose_scale(char trans, const int m, const int n,
+                              const double complex *alphaptr, double complex *A,
+                              const int lda, double complex *B, const int ldb);
+
 void NPomp_dtensor_itranspose_scale021(const long long matstride, int nmat, int n, const double alpha,
                                       double *A, int lda);
 void NPomp_ztensor_itranspose_scale021(const long long matstride, int nmat, int n, const double complex *alpha,
@@ -69,6 +76,9 @@ void NPdset0(double *p, const size_t n);
 void NPzset0(double complex *p, const size_t n);
 void NPdcopy(double *out, const double *in, const size_t n);
 void NPzcopy(double complex *out, const double complex *in, const size_t n);
+
+void NPomp_dset(const int m, const int n, const double alpha, double* A, const int lda);
+void NPomp_zset(const int m, const int n, const double complex *alphaptr, double complex *A, const int lda);
 
 void NPdgemm(const char trans_a, const char trans_b,
              const int m, const int n, const int k,

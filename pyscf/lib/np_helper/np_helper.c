@@ -47,3 +47,27 @@ void NPzcopy(double complex *out, const double complex *in, const size_t n)
                 out[i] = in[i];
         }
 }
+
+void NPomp_dset(const int m, const int n, const double alpha, double* A, const int lda)
+{
+#pragma omp parallel for schedule(static)
+  for (int i = 0; i < m; i++) {
+#pragma omp simd
+    for (int j = 0; j < n; j++) {
+      A[i * (size_t) lda + j] = alpha;
+    }
+  }
+}
+
+void NPomp_zset(const int m, const int n, const double complex *alphaptr,
+                double complex *A, const int lda)
+{
+  const double complex alpha = *alphaptr;
+#pragma omp parallel for schedule(static)
+  for (int i = 0; i < m; i++) {
+#pragma omp simd
+    for (int j = 0; j < n; j++) {
+      A[i * (size_t) lda + j] = alpha;
+    }
+  }
+}
