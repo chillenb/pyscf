@@ -4,63 +4,87 @@
 
 #include "np_helper/np_helper.h"
 
-void NPomp_real_plus_imag(double complex *RESTRICT out,
-                          const double *RESTRICT real,
-                          const double *RESTRICT imag, const size_t n) {
-  out = __builtin_assume_aligned(out, sizeof(double complex));
-  real = __builtin_assume_aligned(real, sizeof(double));
-#pragma omp parallel for
-  for (size_t i = 0; i < n; i++) {
-    out[i] = real[i] + imag[i] * I;
+void NPomp_real_plus_imag(const size_t m,
+                          const size_t n,
+                          const double *__restrict real,
+                          const double *__restrict imag,
+                          const size_t in_stride,
+                          double complex *__restrict out,
+                          const size_t out_stride) {
+#pragma omp parallel for schedule(static)
+  for (size_t i = 0; i < m; i++) {
+#pragma omp simd
+    for(size_t j = 0; j < n; j++) {
+      out[i * out_stride + j] = real[i * in_stride + j] + imag[i * in_stride + j] * _Complex_I;
+    }
   }
 }
 
-void NPomp_extract_real(const double complex *RESTRICT in,
-                        double *RESTRICT real, const size_t n) {
-  in = __builtin_assume_aligned(in, sizeof(double complex));
-  real = __builtin_assume_aligned(real, sizeof(double));
-#pragma omp parallel for
-  for (size_t i = 0; i < n; i++) {
-    real[i] = creal(in[i]);
-  }
-}
-void NPomp_extract_imag(const double complex *RESTRICT in,
-                        double *RESTRICT imag, const size_t n) {
-  in = __builtin_assume_aligned(in, sizeof(double complex));
-  imag = __builtin_assume_aligned(imag, sizeof(double));
-#pragma omp parallel for
-  for (size_t i = 0; i < n; i++) {
-    imag[i] = cimag(in[i]);
-  }
-}
-void NPomp_promote_real(double complex *RESTRICT out,
-                        const double *RESTRICT real, const size_t n) {
-  out = __builtin_assume_aligned(out, sizeof(double complex));
-  real = __builtin_assume_aligned(real, sizeof(double));
-#pragma omp parallel for
-  for (size_t i = 0; i < n; i++) {
-    out[i] = real[i];
+void NPomp_extract_real(const size_t m,
+                        const size_t n,
+                        const double complex *__restrict in,
+                        const size_t in_stride,
+                        double *__restrict real,
+                        const size_t out_stride) {
+#pragma omp parallel for schedule(static)
+  for (size_t i = 0; i < m; i++) {
+#pragma omp simd
+    for(size_t j = 0; j < n; j++) {
+      real[i * out_stride + j] = creal(in[i * in_stride + j]);
+    }
   }
 }
 
-void NPomp_promote_imag(double complex *RESTRICT out,
-                        const double *RESTRICT imag, const size_t n) {
-  out = __builtin_assume_aligned(out, sizeof(double complex));
-  imag = __builtin_assume_aligned(imag, sizeof(double));
-#pragma omp parallel for
-  for (size_t i = 0; i < n; i++) {
-    out[i] = imag[i] * I;
+void NPomp_extract_imag(const size_t m,
+                        const size_t n,
+                        const double complex *__restrict in,
+                        const size_t in_stride,
+                        double *__restrict imag,
+                        const size_t out_stride) {
+#pragma omp parallel for schedule(static)
+  for (size_t i = 0; i < m; i++) {
+#pragma omp simd
+    for(size_t j = 0; j < n; j++) {
+      imag[i * out_stride + j] = cimag(in[i * in_stride + j]);
+    }
   }
 }
 
-void NPomp_axpy_zd(double complex *RESTRICT y, const double *RESTRICT x,
-                   const double a_r, const double a_i, const size_t n) {
-  y = __builtin_assume_aligned(y, sizeof(double complex));
-  x = __builtin_assume_aligned(x, sizeof(double));
-  const double complex a = a_r + a_i * I;
+void NPomp_promote_real(const size_t m,
+                        const size_t n,
+                        const double *__restrict real,
+                        const size_t in_stride,
+                        double complex *__restrict out,
+                        const size_t out_stride) {
+#pragma omp parallel for schedule(static)
+  for (size_t i = 0; i < m; i++) {
+#pragma omp simd
+    for(size_t j = 0; j < n; j++) {
+      out[i * out_stride + j] = real[i * in_stride + j];
+    }
+  }
+}
 
+void NPomp_promote_imag(const size_t m,
+                        const size_t n,
+                        const double *__restrict imag,
+                        const size_t in_stride,
+                        double complex *__restrict out,
+                        const size_t out_stride) {
+#pragma omp parallel for schedule(static)
+  for (size_t i = 0; i < m; i++) {
+#pragma omp simd
+    for(size_t j = 0; j < n; j++) {
+      out[i * out_stride + j] = imag[i * in_stride + j];
+    }
+  }
+}
+
+void NPomp_axpy_zd(const size_t n, const double complex *alphaptr,
+                   const double *__restrict x, double complex *__restrict y) {
+  const double complex alpha = *alphaptr;
 #pragma omp parallel for
   for (size_t i = 0; i < n; i++) {
-    y[i] += a * x[i];
+    y[i] += alpha * x[i];
   }
 }

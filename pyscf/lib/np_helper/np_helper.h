@@ -71,12 +71,41 @@ void NPzset0(double complex *p, const size_t n);
 void NPdcopy(double *out, const double *in, const size_t n);
 void NPzcopy(double complex *out, const double complex *in, const size_t n);
 
-void NPomp_real_plus_imag(double complex *RESTRICT out, const double *RESTRICT real, const double *RESTRICT imag, const size_t n);
-void NPomp_extract_real(const double complex *RESTRICT in, double *RESTRICT real, const size_t n);
-void NPomp_extract_imag(const double complex *RESTRICT in, double *RESTRICT imag, const size_t n);
-void NPomp_promote_real(double complex *RESTRICT out, const double *RESTRICT real, const size_t n);
-void NPomp_promote_imag(double complex *RESTRICT out, const double *RESTRICT imag, const size_t n);
-void NPomp_axpy_zd(double complex *RESTRICT y, const double *RESTRICT x, const double a_r, const double a_i, const size_t n);
+void NPomp_dcopy(const size_t m, const size_t n, const double *in,
+                 const size_t in_stride, double *out, const size_t out_stride);
+void NPomp_zcopy(const size_t m, const size_t n,
+                 const double complex *in, const size_t in_stride,
+                 double complex *out, const size_t out_stride)
+
+void NPomp_dcopy(const size_t m, const size_t n, const double *in,
+                 const size_t in_stride, double *out, const size_t out_stride);
+void NPomp_zcopy(const size_t m, const size_t n, const double complex *in,
+                 const size_t in_stride, double complex *out,
+                 const size_t out_stride);
+void NPomp_dmul(const size_t m, const size_t n, const double *a,
+                const size_t a_stride, double *b, const size_t b_stride);
+void NPomp_zmul(const size_t m, const size_t n, const double complex *a,
+                const size_t a_stride, double complex *b,
+                const size_t b_stride);
+
+void NPomp_real_plus_imag(const size_t m, const size_t n,
+                              const double *real, const double *imag,
+                              const size_t in_stride, double complex *out,
+                              const size_t out_stride);
+void NPomp_extract_real(const size_t m, const size_t n,
+                        const double complex *in, const size_t in_stride,
+                        double *real, const size_t out_stride);
+void NPomp_extract_imag(const size_t m, const size_t n,
+                        const double complex *in, const size_t in_stride,
+                        double *imag, const size_t out_stride);
+void NPomp_promote_real(const size_t m, const size_t n,
+                        const double *real, const size_t in_stride,
+                        double complex *out, const size_t out_stride);
+void NPomp_promote_imag(const size_t m, const size_t n,
+                        const double *imag, const size_t in_stride,
+                        double complex *out, const size_t out_stride);
+void NPomp_axpy_zd(const size_t n, const double complex *alphaptr,
+                   const double *x, double complex *y);
 
 void NPdgemm(const char trans_a, const char trans_b,
              const int m, const int n, const int k,
