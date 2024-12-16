@@ -17,11 +17,12 @@
  */
 
 #include <stdlib.h>
+#include <complex.h>
 
 
 void NPomp_dcopy_012(const size_t ishape0, const size_t ishape1, const size_t ishape2,
-                    const double *in, const size_t istride0, const size_t istride1,
-                    double *out, const size_t ostride0, const size_t ostride1)
+                    const double *__restrict in, const size_t istride0, const size_t istride1,
+                    double *__restrict out, const size_t ostride0, const size_t ostride1)
 {
 #pragma omp parallel for schedule(static) collapse(2)
     for(size_t i = 0; i < ishape0; i++) {
@@ -34,10 +35,38 @@ void NPomp_dcopy_012(const size_t ishape0, const size_t ishape1, const size_t is
     }
 }
 
+void NPomp_zcopy_012(const int conja,
+                    const size_t ishape0, const size_t ishape1, const size_t ishape2,
+                    const double complex *__restrict in, const size_t istride0, const size_t istride1,
+                    double complex *__restrict out, const size_t ostride0, const size_t ostride1)
+{
+    if (!conja) {
+#pragma omp parallel for schedule(static) collapse(2)
+        for(size_t i = 0; i < ishape0; i++) {
+            for(size_t j = 0; j < ishape1; j++) {
+#pragma omp simd
+                for(size_t k = 0; k < ishape2; k++) {
+                    out[i*ostride0 + j*ostride1 + k] = in[i*istride0 + j*istride1 + k];
+                }
+            }
+        }
+    } else {
+#pragma omp parallel for schedule(static) collapse(2)
+        for(size_t i = 0; i < ishape0; i++) {
+            for(size_t j = 0; j < ishape1; j++) {
+#pragma omp simd
+                for(size_t k = 0; k < ishape2; k++) {
+                    out[i*ostride0 + j*ostride1 + k] = conj(in[i*istride0 + j*istride1 + k]);
+                }
+            }
+        }
+    }
+}
+
 /* computes g_ia = alpha * eia / (eia**2 + omega**2) */
 void rho_kernel_restricted(const int nocc, const int nvir,
                            const double *mo_energy_occ, const double *mo_energy_vir,
-                           double *out,
+                           double *__restrict out,
                            const double alpha, const double omega)
 {
     double omega2 = omega * omega;
@@ -50,15 +79,13 @@ void rho_kernel_restricted(const int nocc, const int nvir,
     }
 }
 
-/* computes Pia = alpha * Lia * eia / (eia**2 + omega**2) */
-void mul_Lia_eia_real(const int naux, const int nocc, const int nvir,
-                 double *Lpq, size_t lstride0, size_t lstride1,
-                 double *mo_energy_occ, double *mo_energy_vir,
-                 double *out, size_t ostride0, size_t ostride1,
-                 double alpha, double omega)
+
+/* computes Pia = Lia * gia[None, ...] */
+void dmul_Lia_gia(const int naux, const int nocc, const int nvir,
+                 double *__restrict Lpq, size_t lstride0, size_t lstride1,
+                 const double *__restrict g_ia,
+                 double *__restrict out, size_t ostride0, size_t ostride1)
 {
-    double *g_ia = (double*) malloc((size_t)nocc * (size_t)nvir * sizeof(double));
-    rho_kernel_restricted(nocc, nvir, mo_energy_occ, mo_energy_vir, g_ia, alpha, omega);
 #pragma omp parallel for schedule(static)
     for(size_t i = 0; i < naux; i++) {
         for(size_t j = 0; j < nocc; j++) {
@@ -68,5 +95,55 @@ void mul_Lia_eia_real(const int naux, const int nocc, const int nvir,
             }
         }
     }
+}
+
+
+/* computes Pia = Lia * gia[None, ...] */
+void zmul_Lia_gia(const int naux, const int nocc, const int nvir,
+                 double complex *__restrict Lpq, size_t lstride0, size_t lstride1,
+                 const double *__restrict g_ia,
+                 double complex *__restrict out, size_t ostride0, size_t ostride1)
+{
+#pragma omp parallel for schedule(static)
+    for(size_t i = 0; i < naux; i++) {
+        for(size_t j = 0; j < nocc; j++) {
+#pragma omp simd
+            for(size_t k = 0; k < nvir; k++) {
+                out[i*ostride0 + j*ostride1 + k] = Lpq[i*lstride0 + j*lstride1 + k] * g_ia[j*nvir+k];
+            }
+        }
+    }
+}
+
+
+/* computes Pia = alpha * Lia * eia / (eia**2 + omega**2) */
+void dmul_Lia_response(const int naux, const int nocc, const int nvir,
+                 double *__restrict Lpq, size_t lstride0, size_t lstride1,
+                 double *mo_energy_occ, double *mo_energy_vir,
+                 double *__restrict out, size_t ostride0, size_t ostride1,
+                 double alpha, double omega)
+{
+    double *g_ia = (double*) malloc((size_t)nocc * (size_t)nvir * sizeof(double));
+    rho_kernel_restricted(nocc, nvir, mo_energy_occ, mo_energy_vir, g_ia, alpha, omega);
+    dmul_Lia_gia(naux, nocc, nvir,
+                    Lpq, lstride0, lstride1,
+                    g_ia,
+                    out, ostride0, ostride1);
+    free(g_ia);
+}
+
+/* computes Pia = alpha * Lia * eia / (eia**2 + omega**2) */
+void zmul_Lia_response(const int naux, const int nocc, const int nvir,
+                 double complex *__restrict Lpq, size_t lstride0, size_t lstride1,
+                 double *mo_energy_occ, double *mo_energy_vir,
+                 double complex *__restrict out, size_t ostride0, size_t ostride1,
+                 double alpha, double omega)
+{
+    double *g_ia = (double*) malloc((size_t)nocc * (size_t)nvir * sizeof(double));
+    rho_kernel_restricted(nocc, nvir, mo_energy_occ, mo_energy_vir, g_ia, alpha, omega);
+    zmul_Lia_gia(naux, nocc, nvir,
+                    Lpq, lstride0, lstride1,
+                    g_ia,
+                    out, ostride0, ostride1);
     free(g_ia);
 }
