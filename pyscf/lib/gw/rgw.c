@@ -17,87 +17,56 @@
  */
 
 #include <stdlib.h>
-#include "np_helper/np_helper.h"
-#include "vhf/fblas.h"
-#include <omp.h>
-
-#define MAX_THREADS     256
 
 
-/* 
- *  PiI_PQ, Lpqorbs_Pmn, Lpqorbs_Qml -> mnl
- *  where P and Q have dimension naux,
- *  m has dimension nmo, and n and l have dimension norb.
- */
-void gwgf_contract(double *PiI, double *Lpqorbs, double *Wmn,
-                   int naux, int nmo, int norb,
-                   int lstride0, int lstride1,
-                   int wstride0)
+void NPomp_dcopy_012(const size_t ishape0, const size_t ishape1, const size_t ishape2,
+                    const double *in, const size_t istride0, const size_t istride1,
+                    double *out, const size_t ostride0, const size_t ostride1)
 {
-    const double D0 = 0.0;
-    const double D1 = 1.0;
-    const char TRANS_N = 'N';
-    const char TRANS_T = 'T';
-    const char SIDE = 'R';
-    const char UPLO = 'L';
-#pragma omp parallel
-{
-    double *qslice_buf = calloc(naux*norb, sizeof(double));
-#pragma omp for schedule(static)
-    for(int i = 0; i < nmo; i++) {
-        // dgemm_(&TRANS_N, &TRANS_N, &norb, &naux, &naux,
-        //         &D1,
-        //         Lpqorbs + i*norb, &ldb_lpqorbs,
-        //         PiI, &naux,
-        //         &D0, qslice_buf, &norb);
-        dsymm_(&SIDE, &UPLO, &norb, &naux,
-                &D1,
-                &PiI, &naux,
-                Lpqorbs + i*lstride1, &lstride0,
-                &D0, qslice_buf, &norb);
-        dgemm_(&TRANS_N, &TRANS_T, &norb, &norb, &naux,
-                &D1,
-                qslice_buf, &norb,
-                Lpqorbs + i*lstride1, &lstride0,
-                &D0, Wmn + i*wstride0, &norb);
+#pragma omp parallel for schedule(static) collapse(2)
+    for(size_t i = 0; i < ishape0; i++) {
+        for(size_t j = 0; j < ishape1; j++) {
+#pragma omp simd
+            for(size_t k = 0; k < ishape2; k++) {
+                out[i*ostride0 + j*ostride1 + k] = in[i*istride0 + j*istride1 + k];
+            }
+        }
     }
-    free(qslice_buf);
-}
 }
 
-//jLa, Lji -> ia
-void bse_contract_a(double *jLa, double *Lii_bar, double *Wia,
-                    int naux, int nocc, int nvir,
-                    int jlastride0, int jlastride1,
-                    int liibarstride0, int liibarstride1,
-                    double alpha)
+/* computes g_ia = alpha * eia / (eia**2 + omega**2) */
+void rho_kernel_restricted(const int nocc, const int nvir,
+                           const double *mo_energy_occ, const double *mo_energy_vir,
+                           double *out,
+                           const double alpha, const double omega)
 {
-    const double D0 = 0.0;
-    const double D1 = 1.0;
-    const char TRANS_N = 'N';
-    const char TRANS_T = 'T';
-    double *wiabufs[MAX_THREADS];
-
-#pragma omp parallel
-{
-    double *wia_buf;
-    if(omp_get_thread_num() != 0)
-        wia_buf = calloc(nocc*nvir, sizeof(double));
-    else
-        wia_buf = Wia;
-    wiabufs[omp_get_thread_num()] = wia_buf;
-
-#pragma omp for schedule(static)
-    for(int j = 0; j < nocc; j++) {
-        dgemm_(&TRANS_N, &TRANS_T,
-                &nvir, &nocc, &naux,
-                &alpha,
-                jLa + j*jlastride0, &jlastride1,
-                Lii_bar + j*liibarstride1, &liibarstride0,
-                &D1, wia_buf, &nvir);
+    double omega2 = omega * omega;
+#pragma omp parallel for schedule(static)
+    for(int i = 0; i < nocc; i++) {
+        for(int j = 0; j < nvir; j++) {
+            double eia = mo_energy_occ[i] - mo_energy_vir[j];
+            out[i*nvir+j] = alpha * eia / (eia*eia + omega2);
+        }
     }
-    NPomp_dsum_reduce_inplace(wiabufs, nocc*nvir);
-    if(omp_get_thread_num() != 0)
-        free(wia_buf);
 }
+
+/* computes Pia = alpha * Lia * eia / (eia**2 + omega**2) */
+void mul_Lia_eia_real(const int naux, const int nocc, const int nvir,
+                 double *Lpq, size_t lstride0, size_t lstride1,
+                 double *mo_energy_occ, double *mo_energy_vir,
+                 double *out, size_t ostride0, size_t ostride1,
+                 double alpha, double omega)
+{
+    double *g_ia = (double*) malloc((size_t)nocc * (size_t)nvir * sizeof(double));
+    rho_kernel_restricted(nocc, nvir, mo_energy_occ, mo_energy_vir, g_ia, alpha, omega);
+#pragma omp parallel for schedule(static)
+    for(size_t i = 0; i < naux; i++) {
+        for(size_t j = 0; j < nocc; j++) {
+#pragma omp simd
+            for(size_t k = 0; k < nvir; k++) {
+                out[i*ostride0 + j*ostride1 + k] = Lpq[i*lstride0 + j*lstride1 + k] * g_ia[j*nvir+k];
+            }
+        }
+    }
+    free(g_ia);
 }
