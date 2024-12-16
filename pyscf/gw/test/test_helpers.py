@@ -24,13 +24,13 @@ def get_rho_response_old(omega, mo_energy, Lpq):
     return Pi
 
 class KnownValues(unittest.TestCase):
-    def test_mul_Lia_eia_real(self):
+    def test_dmul_Lia_response(self):
         Lia = np.random.random((3, 10, 15))
         _, nocc, nvir = Lia.shape
         mo_energy = np.random.random(nocc + nvir)
         alpha = 0.1
         omega = 0.2
-        Pia = helpers.mul_Lia_eia_real(Lia, mo_energy, omega, alpha=alpha,
+        Pia = helpers.dmul_Lia_response(Lia, mo_energy, omega, alpha=alpha,
                                        nocc_range=(3, 5))
 
         eia = mo_energy[3:5, None] - mo_energy[None, nocc:]

@@ -7,8 +7,8 @@ from scipy.linalg import blas
 
 # Use ndpointer and argtypes
 # to make the ctypes function calls more readable
-libgw.mul_Lia_eia_real.restype = None
-libgw.mul_Lia_eia_real.argtypes = [
+libgw.dmul_Lia_response.restype = None
+libgw.dmul_Lia_response.argtypes = [
     # int naux, int nocc, int nvir
     c_int, c_int, c_int,
     # double *Lpq
@@ -89,7 +89,7 @@ def dcopy_Lia_nocc_slice(Lia,
 
     return out_arr
 
-def mul_Lia_eia_real(Lia, mo_energy, omega, alpha=4.0, out=None,
+def dmul_Lia_response(Lia, mo_energy, omega, alpha=4.0, out=None,
                      nocc_range: tuple[int, int]|None = None):
     """
     Calculates Pia = alpha * Lia * (eia) / (eia**2 + omega**2)
@@ -134,7 +134,7 @@ def mul_Lia_eia_real(Lia, mo_energy, omega, alpha=4.0, out=None,
     piastrides = [s // Pia.itemsize for s in Pia.strides]
 
     # do the work.
-    libgw.mul_Lia_eia_real(
+    libgw.dmul_Lia_response(
         naux, n_nocc, nvir,
         Lia_slice, liastrides[0], liastrides[1],
         mo_energy[nocc_range[0]:nocc_range[1]],
@@ -192,7 +192,70 @@ def rho_response_restricted(omega, mo_energy, Lia,
     for nocc_slice in lib.prange(0, nocc, nocc_slice_size):
         Lia_slice = dcopy_Lia_nocc_slice(Lia, nocc_range=nocc_slice,
                                          out=lia_buf)
-        Pia_slice = mul_Lia_eia_real(Lia, mo_energy, omega,
+        Pia_slice = dmul_Lia_response(Lia, mo_energy, omega,
+                                     alpha=4.0, nocc_range=nocc_slice,
+                                     out=pia_buf)
+
+        blas.dgemm(alpha=1.0,
+                   a=Pia_slice.reshape(naux, -1).T,
+                   b=Lia_slice.reshape(naux, -1).T,
+                   c=Pi.T,
+                   beta=1.0,
+                   trans_a=1,
+                   trans_b=0,
+                   overwrite_c=True)
+
+    return Pi
+
+
+def rho_response_restricted(omega, mo_energy, Lia, max_memory=60):
+    """Compute density-density response function in auxiliary basis at freq iw.
+    See equation 58 in 10.1088/1367-2630/14/5/053020,
+    and equation 24 in doi.org/10.1021/acs.jctc.0c00704.
+
+    Parameters:
+    -----------
+
+    omega : float
+        imaginary frequency
+    mo_energy : np.ndarray
+        orbital energies
+    Lia : np.ndarray
+        occ-vir block of three-center density-fitting matrix.
+    max_memory : float
+        max memory in MB
+
+    
+    Returns:
+    --------
+    Pi : np.ndarray
+        density-density response function in auxiliary basis at freq iw.
+    """
+    naux, nocc, nvir = Lia.shape
+
+    # This is the original implementation
+    # eia = mo_energy[:nocc,None] - mo_energy[None,nocc:]
+    # eia = eia/(omega**2+eia*eia)
+    # Pia = einsum('Pia,ia->Pia',Lpq,eia)
+    # # Response from both spin-up and spin-down density
+    # Pi = 4. * einsum('Pia,Qia->PQ',Pia,Lpq)
+
+    # return Pi
+
+    nocc_slice_size = (max_memory*1024**2) // (2 * naux * nvir)
+    nocc_slice_size = max(1, nocc_slice_size)
+
+    Pi = lib.zeros((naux, naux))
+
+    # compute the tensor contraction in batches
+    # of occupied orbitals to save memory.
+    lia_buf = np.empty((naux * nocc_slice_size * nvir))
+    pia_buf = np.empty((naux * nocc_slice_size * nvir))
+
+    for nocc_slice in lib.prange(0, nocc, nocc_slice_size):
+        Lia_slice = dcopy_Lia_nocc_slice(Lia, nocc_range=nocc_slice,
+                                         out=lia_buf)
+        Pia_slice = dmul_Lia_response(Lia, mo_energy, omega,
                                      alpha=4.0, nocc_range=nocc_slice,
                                      out=pia_buf)
 

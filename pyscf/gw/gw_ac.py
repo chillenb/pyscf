@@ -38,6 +38,7 @@ import numpy as np
 import h5py
 from scipy.optimize import newton, least_squares
 
+from pyscf.gw.helpers import rho_response_restricted
 from pyscf import lib
 from pyscf.lib import logger
 from pyscf.ao2mo import _ao2mo
@@ -144,19 +145,6 @@ def kernel(gw, mo_energy, mo_coeff, Lpq=None, orbs=None,
 
     return conv, mo_energy, mo_coeff
 
-def get_rho_response(omega, mo_energy, Lpq):
-    '''
-    Compute density response function in auxiliary basis at freq iw
-    '''
-    naux, nocc, nvir = Lpq.shape
-    eia = mo_energy[:nocc,None] - mo_energy[None,nocc:]
-    eia = eia/(omega**2+eia*eia)
-    Pia = einsum('Pia,ia->Pia',Lpq,eia)
-    # Response from both spin-up and spin-down density
-    Pi = 4. * einsum('Pia,Qia->PQ',Pia,Lpq)
-
-    return Pi
-
 def get_sigma_diag(gw, orbs, Lpq, freqs, wts, iw_cutoff=None):
     '''
     Compute GW correlation self-energy (diagonal elements)
@@ -201,7 +189,7 @@ def get_sigma_diag(gw, orbs, Lpq, freqs, wts, iw_cutoff=None):
             omega[p] = omega_vir.copy()
 
     for w in range(nw):
-        Pi = get_rho_response(freqs[w], mo_energy, Lpq[:,:nocc,nocc:])
+        Pi = rho_response_restricted(freqs[w], mo_energy, Lpq[:,:nocc,nocc:])
         Pi_inv = np.linalg.inv(np.eye(naux)-Pi)-np.eye(naux)
         g0_occ = wts[w] * emo_occ / (emo_occ**2+freqs[w]**2)
         g0_vir = wts[w] * emo_vir / (emo_vir**2+freqs[w]**2)
