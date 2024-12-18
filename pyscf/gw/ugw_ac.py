@@ -39,6 +39,7 @@ import numpy as np
 import h5py
 from scipy.optimize import newton, least_squares
 
+from pyscf.gw.helpers import rho_response_unrestricted
 from pyscf import lib
 from pyscf.lib import logger
 from pyscf.ao2mo import _ao2mo
@@ -169,22 +170,22 @@ def kernel(gw, mo_energy, mo_coeff, Lpq=None, orbs=None,
 
     return conv, mo_energy, mo_coeff
 
-def get_rho_response(omega, mo_energy, Lpqa, Lpqb):
-    '''
-    Compute density response function in auxiliary basis at freq iw
-    '''
-    naux, nocca, nvira = Lpqa.shape
-    naux, noccb, nvirb = Lpqb.shape
-    eia_a = mo_energy[0,:nocca,None] - mo_energy[0,None,nocca:]
-    eia_b = mo_energy[1,:noccb,None] - mo_energy[1,None,noccb:]
-    eia_a = eia_a/(omega**2+eia_a*eia_a)
-    eia_b = eia_b/(omega**2+eia_b*eia_b)
-    Pia_a = einsum('Pia,ia->Pia',Lpqa,eia_a)
-    Pia_b = einsum('Pia,ia->Pia',Lpqb,eia_b)
-    # Response from both spin-up and spin-down density
-    Pi = 2.* (einsum('Pia,Qia->PQ',Pia_a,Lpqa) + einsum('Pia,Qia->PQ',Pia_b,Lpqb))
+# def get_rho_response(omega, mo_energy, Lpqa, Lpqb):
+#     '''
+#     Compute density response function in auxiliary basis at freq iw
+#     '''
+#     naux, nocca, nvira = Lpqa.shape
+#     naux, noccb, nvirb = Lpqb.shape
+#     eia_a = mo_energy[0,:nocca,None] - mo_energy[0,None,nocca:]
+#     eia_b = mo_energy[1,:noccb,None] - mo_energy[1,None,noccb:]
+#     eia_a = eia_a/(omega**2+eia_a*eia_a)
+#     eia_b = eia_b/(omega**2+eia_b*eia_b)
+#     Pia_a = einsum('Pia,ia->Pia',Lpqa,eia_a)
+#     Pia_b = einsum('Pia,ia->Pia',Lpqb,eia_b)
+#     # Response from both spin-up and spin-down density
+#     Pi = 2.* (einsum('Pia,Qia->PQ',Pia_a,Lpqa) + einsum('Pia,Qia->PQ',Pia_b,Lpqb))
 
-    return Pi
+#     return Pi
 
 def get_sigma_diag(gw, orbs, Lpq, freqs, wts, iw_cutoff=None):
     '''
@@ -240,7 +241,7 @@ def get_sigma_diag(gw, orbs, Lpq, freqs, wts, iw_cutoff=None):
                 omega[s,p] = omega_vir.copy()
 
     for w in range(nw):
-        Pi = get_rho_response(freqs[w], mo_energy, Lpq[0,:,:nocca,nocca:], Lpq[1,:,:noccb,noccb:])
+        Pi = rho_response_unrestricted(freqs[w], mo_energy, Lpq[0,:,:nocca,nocca:], Lpq[1,:,:noccb,noccb:])
         Pi_inv = np.linalg.inv(np.eye(naux)-Pi)-np.eye(naux)
         g0_occ_a = wts[w] * emo_occ_a / (emo_occ_a**2+freqs[w]**2)
         g0_vir_a = wts[w] * emo_vir_a / (emo_vir_a**2+freqs[w]**2)

@@ -144,8 +144,7 @@ def dmul_Lia_response(Lia, mo_energy, omega, alpha=4.0, out=None,
     )
     return Pia
 
-def rho_response_restricted(omega, mo_energy, Lia,
-                            max_memory=60):
+def rho_response_restricted(omega, mo_energy, Lia, max_memory=60):
     """Compute density-density response function in auxiliary basis at freq iw.
     See equation 58 in 10.1088/1367-2630/14/5/053020,
     and equation 24 in doi.org/10.1021/acs.jctc.0c00704.
@@ -207,8 +206,7 @@ def rho_response_restricted(omega, mo_energy, Lia,
 
     return Pi
 
-
-def rho_response_restricted(omega, mo_energy, Lia, max_memory=60):
+def rho_response_unrestricted(omega, mo_energy, Lia_a, Lia_b, max_memory=60):
     """Compute density-density response function in auxiliary basis at freq iw.
     See equation 58 in 10.1088/1367-2630/14/5/053020,
     and equation 24 in doi.org/10.1021/acs.jctc.0c00704.
@@ -220,8 +218,10 @@ def rho_response_restricted(omega, mo_energy, Lia, max_memory=60):
         imaginary frequency
     mo_energy : np.ndarray
         orbital energies
-    Lia : np.ndarray
-        occ-vir block of three-center density-fitting matrix.
+    Lia_a : np.ndarray
+        occ-vir block of three-center density-fitting matrix (alpha orbitals).
+    Lia_b : np.ndarray
+        occ-vir block of three-center density-fitting matrix (beta orbitals).
     max_memory : float
         max memory in MB
 
@@ -231,41 +231,50 @@ def rho_response_restricted(omega, mo_energy, Lia, max_memory=60):
     Pi : np.ndarray
         density-density response function in auxiliary basis at freq iw.
     """
-    naux, nocc, nvir = Lia.shape
+    naux, nocca, nvira = Lia_a.shape
+    naux, noccb, nvirb = Lia_b.shape
 
     # This is the original implementation
-    # eia = mo_energy[:nocc,None] - mo_energy[None,nocc:]
-    # eia = eia/(omega**2+eia*eia)
-    # Pia = einsum('Pia,ia->Pia',Lpq,eia)
+    # naux, nocca, nvira = Lia_a.shape
+    # naux, noccb, nvirb = Lia_b.shape
+    # eia_a = mo_energy[0,:nocca,None] - mo_energy[0,None,nocca:]
+    # eia_b = mo_energy[1,:noccb,None] - mo_energy[1,None,noccb:]
+    # eia_a = eia_a/(omega**2+eia_a*eia_a)
+    # eia_b = eia_b/(omega**2+eia_b*eia_b)
+    # Pia_a = einsum('Pia,ia->Pia',Lia_a,eia_a)
+    # Pia_b = einsum('Pia,ia->Pia',Lia_b,eia_b)
     # # Response from both spin-up and spin-down density
-    # Pi = 4. * einsum('Pia,Qia->PQ',Pia,Lpq)
+    # Pi = 2.* (einsum('Pia,Qia->PQ',Pia_a,Lia_a) + einsum('Pia,Qia->PQ',Pia_b,Lia_b))
 
     # return Pi
 
-    nocc_slice_size = (max_memory*1024**2) // (2 * naux * nvir)
+    nvir_max = max(nvira, nvirb)
+
+    nocc_slice_size = (max_memory*1024**2) // (2 * naux * nvir_max)
     nocc_slice_size = max(1, nocc_slice_size)
 
     Pi = lib.zeros((naux, naux))
 
     # compute the tensor contraction in batches
     # of occupied orbitals to save memory.
-    lia_buf = np.empty((naux * nocc_slice_size * nvir))
-    pia_buf = np.empty((naux * nocc_slice_size * nvir))
+    lia_buf = np.empty((naux * nocc_slice_size * nvir_max))
+    pia_buf = np.empty((naux * nocc_slice_size * nvir_max))
 
-    for nocc_slice in lib.prange(0, nocc, nocc_slice_size):
-        Lia_slice = dcopy_Lia_nocc_slice(Lia, nocc_range=nocc_slice,
-                                         out=lia_buf)
-        Pia_slice = dmul_Lia_response(Lia, mo_energy, omega,
-                                     alpha=4.0, nocc_range=nocc_slice,
-                                     out=pia_buf)
-
-        blas.dgemm(alpha=1.0,
-                   a=Pia_slice.reshape(naux, -1).T,
-                   b=Lia_slice.reshape(naux, -1).T,
-                   c=Pi.T,
-                   beta=1.0,
-                   trans_a=1,
-                   trans_b=0,
-                   overwrite_c=True)
+    for Lia, nocc, mo_energy_s in [(Lia_a, nocca, mo_energy[0]),
+                                   (Lia_b, noccb, mo_energy[1])]:
+        for nocc_slice in lib.prange(0, nocc, nocc_slice_size):
+            Lia_slice = dcopy_Lia_nocc_slice(Lia, nocc_range=nocc_slice,
+                                            out=lia_buf)
+            Pia_slice = dmul_Lia_response(Lia, mo_energy_s, omega,
+                                        alpha=2.0, nocc_range=nocc_slice,
+                                        out=pia_buf)
+            blas.dgemm(alpha=1.0,
+                    a=Pia_slice.reshape(naux, -1).T,
+                    b=Lia_slice.reshape(naux, -1).T,
+                    c=Pi.T,
+                    beta=1.0,
+                    trans_a=1,
+                    trans_b=0,
+                    overwrite_c=True)
 
     return Pi
