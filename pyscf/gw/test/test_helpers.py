@@ -37,11 +37,15 @@ class KnownValues(unittest.TestCase):
         expected = alpha * Lia[:, 3:5] * eia[None, ...] / (eia[None, ...]**2 + omega**2)
         self.assertAlmostEqual(np.linalg.norm(Pia - expected), 0.0, 12)
 
-    def test_dcopy_Lia_nocc_slice(self):
+    def test_copy_Lia_nocc_slice(self):
         Lia = np.random.random((3, 4, 5))
         nocc_range = (1, 3)
-        Pia = helpers.dcopy_Lia_nocc_slice(Lia, nocc_range=nocc_range)
+        Pia = helpers.copy_Lia_nocc_slice(Lia, nocc_range=nocc_range)
         self.assertAlmostEqual(np.linalg.norm(Pia - Lia[:, 1:3, :]), 0.0, 12)
+
+        Lia = Lia * 1j
+        Pia = helpers.copy_Lia_nocc_slice(Lia, nocc_range=nocc_range, conj=True)
+        self.assertAlmostEqual(np.linalg.norm(Pia.conj() - Lia[:, 1:3, :]), 0.0, 12)
 
     def test_rho_response_restricted(self):
         omega = 0.1

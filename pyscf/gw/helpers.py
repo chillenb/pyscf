@@ -1,4 +1,5 @@
 from pyscf import lib
+from pyscf.lib.numpy_helper import _np_helper
 libgw = lib.load_library('libgw')
 import numpy as np
 import ctypes
@@ -27,8 +28,8 @@ libgw.dmul_Lia_response.argtypes = [
     ctypes.c_double, ctypes.c_double
 ]
 
-libgw.NPomp_dcopy_012.restype = None
-libgw.NPomp_dcopy_012.argtypes = [
+_np_helper.NPomp_dcopy_012.restype = None
+_np_helper.NPomp_dcopy_012.argtypes = [
     # size_t ishape0, size_t ishape1, size_t ishape2
     ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t,
     # double *in
@@ -41,9 +42,26 @@ libgw.NPomp_dcopy_012.argtypes = [
     ctypes.c_size_t, ctypes.c_size_t
 ]
 
-def dcopy_Lia_nocc_slice(Lia,
+_np_helper.NPomp_zcopy_012.restype = None
+_np_helper.NPomp_zcopy_012.argtypes = [
+    # int conja
+    ctypes.c_int,
+    # size_t ishape0, size_t ishape1, size_t ishape2
+    ctypes.c_size_t, ctypes.c_size_t, ctypes.c_size_t,
+    # double *in
+    np.ctypeslib.ndpointer(dtype=np.complex128, ndim=3),
+    # size_t istride0, size_t istride1
+    ctypes.c_size_t, ctypes.c_size_t,
+    # double *out
+    np.ctypeslib.ndpointer(dtype=np.complex128, ndim=3),
+    # size_t ostride0, size_t ostride1
+    ctypes.c_size_t, ctypes.c_size_t
+]
+
+def copy_Lia_nocc_slice(Lia,
                          out=None,
-                         nocc_range: tuple[int, int]|None = None):
+                         nocc_range: tuple[int, int]|None = None,
+                         conj=False):
     """Copy a chunk of the Lia array along the nocc axis.
     This is done to make the slice BLAS-able.
     It's much faster than np.ascontiguousarray.
@@ -81,11 +99,25 @@ def dcopy_Lia_nocc_slice(Lia,
     liastrides = [s // Lia_slice.itemsize for s in Lia_slice.strides]
     outstrides = [s // out_arr.itemsize for s in out_arr.strides]
 
-    libgw.NPomp_dcopy_012(
-        naux, n_nocc, nvir,
-        Lia_slice, liastrides[0], liastrides[1],
-        out_arr, outstrides[0], outstrides[1]
-    )
+    if Lia.dtype == np.complex128:
+        if conj:
+            _np_helper.NPomp_zcopy_012(
+                1, naux, n_nocc, nvir,
+                Lia_slice, liastrides[0], liastrides[1],
+                out_arr, outstrides[0], outstrides[1]
+            )
+        else:
+            _np_helper.NPomp_zcopy_012(
+                0, naux, n_nocc, nvir,
+                Lia_slice, liastrides[0], liastrides[1],
+                out_arr, outstrides[0], outstrides[1]
+            )
+    else:
+        _np_helper.NPomp_dcopy_012(
+            naux, n_nocc, nvir,
+            Lia_slice, liastrides[0], liastrides[1],
+            out_arr, outstrides[0], outstrides[1]
+        )
 
     return out_arr
 
@@ -189,7 +221,7 @@ def rho_response_restricted(omega, mo_energy, Lia, max_memory=60):
     pia_buf = np.empty((naux * nocc_slice_size * nvir))
 
     for nocc_slice in lib.prange(0, nocc, nocc_slice_size):
-        Lia_slice = dcopy_Lia_nocc_slice(Lia, nocc_range=nocc_slice,
+        Lia_slice = copy_Lia_nocc_slice(Lia, nocc_range=nocc_slice,
                                          out=lia_buf)
         Pia_slice = dmul_Lia_response(Lia, mo_energy, omega,
                                      alpha=4.0, nocc_range=nocc_slice,
@@ -263,7 +295,7 @@ def rho_response_unrestricted(omega, mo_energy, Lia_a, Lia_b, max_memory=60):
     for Lia, nocc, mo_energy_s in [(Lia_a, nocca, mo_energy[0]),
                                    (Lia_b, noccb, mo_energy[1])]:
         for nocc_slice in lib.prange(0, nocc, nocc_slice_size):
-            Lia_slice = dcopy_Lia_nocc_slice(Lia, nocc_range=nocc_slice,
+            Lia_slice = copy_Lia_nocc_slice(Lia, nocc_range=nocc_slice,
                                             out=lia_buf)
             Pia_slice = dmul_Lia_response(Lia, mo_energy_s, omega,
                                         alpha=2.0, nocc_range=nocc_slice,

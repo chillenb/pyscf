@@ -141,3 +141,60 @@ void NPomp_zmul(const size_t m,
                 }
         }
 }
+
+/*
+ * Copy a double precision 3D tensor with multithreading.
+ * (ishape0, ishape1, ishape2) describes the shape of the input tensor.
+ * The input tensor and output tensors are both assumed to be stored in C-order, i.e.
+ * T[i, j, k] == T[i*istride0 + j*istride1 + k].
+ */
+void NPomp_dcopy_012(const size_t ishape0, const size_t ishape1, const size_t ishape2,
+                    const double *__restrict in, const size_t istride0, const size_t istride1,
+                    double *__restrict out, const size_t ostride0, const size_t ostride1)
+{
+#pragma omp parallel for schedule(static)
+    for(size_t i = 0; i < ishape0; i++) {
+        for(size_t j = 0; j < ishape1; j++) {
+#pragma omp simd
+            for(size_t k = 0; k < ishape2; k++) {
+                out[i*ostride0 + j*ostride1 + k] = in[i*istride0 + j*istride1 + k];
+            }
+        }
+    }
+}
+
+/*
+ * Copy a complex double 3D tensor with multithreading.
+ * (ishape0, ishape1, ishape2) describes the shape of the input tensor.
+ * The input tensor and output tensors are both assumed to be stored in C-order, i.e.
+ * T[i, j, k] == T[i*istride0 + j*istride1 + k].
+ *
+ * The output tensor is conjugated if conja is not 0.
+ */
+void NPomp_zcopy_012(const int conja,
+                    const size_t ishape0, const size_t ishape1, const size_t ishape2,
+                    const double complex *__restrict in, const size_t istride0, const size_t istride1,
+                    double complex *__restrict out, const size_t ostride0, const size_t ostride1)
+{
+    if (!conja) {
+#pragma omp parallel for schedule(static)
+        for(size_t i = 0; i < ishape0; i++) {
+            for(size_t j = 0; j < ishape1; j++) {
+#pragma omp simd
+                for(size_t k = 0; k < ishape2; k++) {
+                    out[i*ostride0 + j*ostride1 + k] = in[i*istride0 + j*istride1 + k];
+                }
+            }
+        }
+    } else {
+#pragma omp parallel for schedule(static)
+        for(size_t i = 0; i < ishape0; i++) {
+            for(size_t j = 0; j < ishape1; j++) {
+#pragma omp simd
+                for(size_t k = 0; k < ishape2; k++) {
+                    out[i*ostride0 + j*ostride1 + k] = conj(in[i*istride0 + j*istride1 + k]);
+                }
+            }
+        }
+    }
+}

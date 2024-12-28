@@ -18,50 +18,8 @@
 
 #include <stdlib.h>
 #include <complex.h>
+#include "np_helper/np_helper.h"
 
-
-void NPomp_dcopy_012(const size_t ishape0, const size_t ishape1, const size_t ishape2,
-                    const double *__restrict in, const size_t istride0, const size_t istride1,
-                    double *__restrict out, const size_t ostride0, const size_t ostride1)
-{
-#pragma omp parallel for schedule(static) collapse(2)
-    for(size_t i = 0; i < ishape0; i++) {
-        for(size_t j = 0; j < ishape1; j++) {
-#pragma omp simd
-            for(size_t k = 0; k < ishape2; k++) {
-                out[i*ostride0 + j*ostride1 + k] = in[i*istride0 + j*istride1 + k];
-            }
-        }
-    }
-}
-
-void NPomp_zcopy_012(const int conja,
-                    const size_t ishape0, const size_t ishape1, const size_t ishape2,
-                    const double complex *__restrict in, const size_t istride0, const size_t istride1,
-                    double complex *__restrict out, const size_t ostride0, const size_t ostride1)
-{
-    if (!conja) {
-#pragma omp parallel for schedule(static) collapse(2)
-        for(size_t i = 0; i < ishape0; i++) {
-            for(size_t j = 0; j < ishape1; j++) {
-#pragma omp simd
-                for(size_t k = 0; k < ishape2; k++) {
-                    out[i*ostride0 + j*ostride1 + k] = in[i*istride0 + j*istride1 + k];
-                }
-            }
-        }
-    } else {
-#pragma omp parallel for schedule(static) collapse(2)
-        for(size_t i = 0; i < ishape0; i++) {
-            for(size_t j = 0; j < ishape1; j++) {
-#pragma omp simd
-                for(size_t k = 0; k < ishape2; k++) {
-                    out[i*ostride0 + j*ostride1 + k] = conj(in[i*istride0 + j*istride1 + k]);
-                }
-            }
-        }
-    }
-}
 
 /* computes g_ia = alpha * eia / (eia**2 + omega**2) */
 void rho_kernel_restricted(const int nocc, const int nvir,

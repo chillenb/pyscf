@@ -88,6 +88,16 @@ void NPomp_zmul(const size_t m, const size_t n,
                 double complex *b, const size_t b_stride,
                 double complex *out, const size_t out_stride);
 
+void NPomp_dcopy_012(const size_t ishape0, const size_t ishape1, const size_t ishape2,
+                     const double *in, const size_t istride0, const size_t istride1,
+                     double *out, const size_t ostride0, const size_t ostride1);
+
+void NPomp_zcopy_012(const int conja,
+                     const size_t ishape0, const size_t ishape1, const size_t ishape2,
+                     const double complex *in, const size_t istride0, const size_t istride1,
+                     double complex *out, const size_t ostride0, const size_t ostride1);
+
+
 void NPdgemm(const char trans_a, const char trans_b,
              const int m, const int n, const int k,
              const int lda, const int ldb, const int ldc,
