@@ -107,3 +107,9 @@ int GTO_ft_ovlp_sph(double *outR, double *outI, int *shls, int *dims,
         xyI = gx##R[ix*bs+k] * gy##I[iy*bs+k] + gx##I[ix*bs+k] * gy##R[iy*bs+k]; \
         outR += xyR * gz##R[iz*bs+k] - xyI * gz##I[iz*bs+k]; \
         outI += xyR * gz##I[iz*bs+k] + xyI * gz##R[iz*bs+k];
+
+#define ZMAD_MUL(outR, outI, gx, gy, gz, factor) \
+        xyR = gx##R[ix*bs+k] * gy##R[iy*bs+k] - gx##I[ix*bs+k] * gy##I[iy*bs+k]; \
+        xyI = gx##R[ix*bs+k] * gy##I[iy*bs+k] + gx##I[ix*bs+k] * gy##R[iy*bs+k]; \
+        outR += factor * (xyR * gz##R[iz*bs+k] - xyI * gz##I[iz*bs+k]); \
+        outI += factor * (xyR * gz##I[iz*bs+k] + xyI * gz##R[iz*bs+k]);
