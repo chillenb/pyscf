@@ -27,7 +27,6 @@ import numpy as np
 from pyscf import lib
 from pyscf.pbc import gto as pgto
 from pyscf.pbc.df import ft_ao as pft_ao
-from pyscf import __config__
 from pyscf.pbc.lib.kpts_helper import gamma_point
 from pyscf.pbc.gto.pseudo.pp_int import fake_cell_vnl, _contract_ppnl
 
@@ -70,22 +69,35 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None):
         ppnl = ppnl[0]
     return ppnl
 
-
+# Modified version of _int_vnl in pyscf.pbc.gto.pseudo.pp_int
 def _int_vnl_ft(cell, fakecell, hl_blocks, kpts, Gv, q=np.zeros(3),
                 intors=None, comp=1):
     if intors is None:
         intors = ['GTO_ft_ovlp', 'GTO_ft_r2_origi', 'GTO_ft_r4_origi']
 
+    # Normally you only need one point in reciprocal space at a time.
+    # (this corresponds to one value of the vector potential A)
     assert Gv.shape[0] == 1, "Gv must be a single vector"
 
     def int_ket(_bas, intor):
         if len(_bas) == 0:
             return []
+
+        # make a copy of the fakecell including only the
+        # basis functions that were passed in.
         fakecell_trunc = fakecell.copy(deep=True)
         fakecell_trunc._bas = _bas
+
+        # make an auxiliary cell containing both the
+        # original cell and the fakecell functions
         cell_conc_fakecell = pgto.conc_cell(cell, fakecell_trunc)
+
         intor = cell_conc_fakecell._add_suffix(intor)
         nbas_conc = cell_conc_fakecell.nbas
+
+        # This shls_slice selects all pairs of functions
+        # with GTH projectors in the first index and
+        # AO basis functions in the second index.
         shls_slice = (cell.nbas, nbas_conc, 0, cell.nbas)
 
         return pft_ao.ft_aopair_kpts(cell_conc_fakecell,
