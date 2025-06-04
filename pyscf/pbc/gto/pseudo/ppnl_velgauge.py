@@ -64,7 +64,7 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None):
                 p0 = offset[i]
                 ilp[i] = ppnl_half[i][k][p0:p0+nd]
                 offset[i] = p0 + nd
-            ppnl[k] += np.einsum('ilp,ij,jlq->pq', ilp.conj(), hl, ilp)
+            ppnl[k] += np.einsum('ilp,ij,jlq->pq', ilp, hl, ilp.conj())
 
     if kpts is None or np.shape(kpts) == (3,):
         ppnl = ppnl[0]
@@ -101,14 +101,17 @@ def _int_vnl_ft(cell, fakecell, hl_blocks, kpts, Gv, q=np.zeros(3),
         # AO basis functions in the second index.
         shls_slice = (cell.nbas, nbas_conc, 0, cell.nbas)
 
-        return pft_ao.ft_aopair_kpts(cell_conc_fakecell,
+        retv = pft_ao.ft_aopair_kpts(cell_conc_fakecell,
                               Gv,
                               q=q,
                               shls_slice=shls_slice,
                               aosym='s1',
                               intor=intor,
                               comp=comp,
-                              kptjs=kpts)[0]
+                              kptjs=kpts)
+        # Gv is a single vector
+        retv = retv[:, 0, :, :]
+        return retv
 
     hl_dims = np.asarray([len(hl) for hl in hl_blocks])
     out = (int_ket(fakecell._bas[hl_dims>0], intors[0]),
