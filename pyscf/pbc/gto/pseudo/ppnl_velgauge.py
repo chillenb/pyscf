@@ -44,8 +44,9 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None):
     ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3))
     nao = cell.nao_nr()
 
-    if gamma_point(kpts_lst):
-        return _contract_ppnl(cell, fakecell, hl_blocks, ppnl_half, kpts=kpts)
+    # ppnl_half could be complex, so _contract_ppnl will not work.
+    # if gamma_point(kpts_lst):
+    #     return _contract_ppnl(cell, fakecell, hl_blocks, ppnl_half, kpts=kpts)
 
     buf = np.empty((3*9*nao), dtype=np.complex128)
 
