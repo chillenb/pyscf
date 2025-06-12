@@ -27,8 +27,7 @@ import numpy as np
 from pyscf import lib
 from pyscf.pbc import gto as pgto
 from pyscf.pbc.df import ft_ao as pft_ao
-from pyscf.pbc.lib.kpts_helper import gamma_point
-from pyscf.pbc.gto.pseudo.pp_int import fake_cell_vnl, _contract_ppnl
+from pyscf.pbc.gto.pseudo.pp_int import fake_cell_vnl
 
 libpbc = lib.load_library('libpbc')
 
@@ -70,9 +69,62 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None):
         ppnl = ppnl[0]
     return ppnl
 
+def get_gth_pp_nl_velgauge_commutator(cell, A_over_c, kpts=None, origin=(0,0,0)):
+    if kpts is None:
+        kpts_lst = np.zeros((1,3))
+    else:
+        kpts_lst = np.reshape(kpts, (-1,3))
+    nkpts = len(kpts_lst)
+
+    fakecell, hl_blocks = fake_cell_vnl(cell)
+    ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3))
+    ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3), intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'), comp=3, origin=origin)
+
+    nao = cell.nao_nr()
+
+    # ppnl_half could be complex, so _contract_ppnl will not work.
+    # if gamma_point(kpts_lst):
+    #     return _contract_ppnl(cell, fakecell, hl_blocks, ppnl_half, kpts=kpts)
+
+    buf = np.empty((3*9*nao), dtype=np.complex128)
+    buf2 = np.empty((3*3*9*nao), dtype=np.complex128)
+
+    # We set this equal to zeros in case hl_blocks loop is skipped
+    # and ppnl is returned
+    vppnl_commutator = np.zeros((nkpts, 3, nao, nao), dtype=np.complex128)
+    for k, kpt in enumerate(kpts_lst):
+        offset = [0] * 3
+        for ib, hl in enumerate(hl_blocks):
+            l = fakecell.bas_angular(ib)
+            nd = 2 * l + 1
+            hl_dim = hl.shape[0]
+            ilp = np.ndarray((hl_dim, nd, nao), dtype=np.complex128, buffer=buf)
+            rc_ilp = np.ndarray((3, hl_dim, nd, nao), dtype=np.complex128, buffer=buf2)
+            for i in range(hl_dim):
+                p0 = offset[i]
+                ilp[i] = ppnl_half[i][k][p0:p0+nd]
+                rc_ilp[:, i] = ppnl_rc_half[i][k][:, p0:p0+nd]
+                offset[i] = p0 + nd
+            vppnl_commutator[k] += np.einsum('xilp,ij,jlq->xpq', rc_ilp.conj(), hl, ilp)
+            vppnl_commutator[k] -= np.einsum('ilp,ij,xjlq->xpq', ilp.conj(), hl, rc_ilp)
+    if kpts is None or np.shape(kpts) == (3,):
+        vppnl_commutator = vppnl_commutator[0]
+    return vppnl_commutator
+
+def get_gth_ppnl_rc(cell, A_over_c, kpts=None, origin=(0,0,0)):
+    if kpts is None:
+        kpts_lst = np.zeros((1,3))
+    else:
+        kpts_lst = np.reshape(kpts, (-1,3))
+
+    fakecell, hl_blocks = fake_cell_vnl(cell)
+    ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3))
+    ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3), intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'), comp=3, origin=origin)
+    return ppnl_half, ppnl_rc_half
+
 # Modified version of _int_vnl in pyscf.pbc.gto.pseudo.pp_int
 def _int_vnl_ft(cell, fakecell, hl_blocks, kpts, Gv, q=np.zeros(3),
-                intors=None, comp=1):
+                intors=None, comp=1, origin=(0,0,0)):
     if intors is None:
         intors = ['GTO_ft_ovlp', 'GTO_ft_r2_origi', 'GTO_ft_r4_origi']
 
@@ -101,16 +153,20 @@ def _int_vnl_ft(cell, fakecell, hl_blocks, kpts, Gv, q=np.zeros(3),
         # AO basis functions in the second index.
         shls_slice = (cell.nbas, nbas_conc, 0, cell.nbas)
 
-        retv = pft_ao.ft_aopair_kpts(cell_conc_fakecell,
-                              Gv,
-                              q=q,
-                              shls_slice=shls_slice,
-                              aosym='s1',
-                              intor=intor,
-                              comp=comp,
-                              kptjs=kpts)
+        with cell_conc_fakecell.with_common_origin(origin):
+            retv = pft_ao.ft_aopair_kpts(cell_conc_fakecell,
+                                Gv,
+                                q=q,
+                                shls_slice=shls_slice,
+                                aosym='s1',
+                                intor=intor,
+                                comp=comp,
+                                kptjs=kpts)
         # Gv is a single vector
-        retv = retv[:, 0, :, :]
+        if comp == 1:
+            retv = retv[:, 0]
+        else:
+            retv = retv[:, :, 0]
         return retv
 
     hl_dims = np.asarray([len(hl) for hl in hl_blocks])

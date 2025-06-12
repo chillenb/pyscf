@@ -250,24 +250,19 @@ int GTO_ft_r4_origi_sph(double *outR, double *outI, int *shls, int *dims,
  * ( x^1 i | j )
  * ri is the shift from the center R_O to the center of |i>
  * r - R_O = (r-R_i) + ri, ri = R_i - R_O
+ * Note: this is called separately for real and imaginary parts.
  */
 void GTO_ft_x1i(double *f, double *g, double ri[3], int li, int lj,
                 FTEnvVars *envs) {
   int dj = envs->g_stride_j;
   int bs = envs->block_size;
   size_t g_size = envs->g_size * bs;
-  double *gxR = g;
-  double *gyR = gxR + g_size;
-  double *gzR = gyR + g_size;
-  double *gxI = gzR + g_size;
-  double *gyI = gxI + g_size;
-  double *gzI = gyI + g_size;
-  double *fxR = f;
-  double *fyR = fxR + g_size;
-  double *fzR = fyR + g_size;
-  double *fxI = fzR + g_size;
-  double *fyI = fxI + g_size;
-  double *fzI = fyI + g_size;
+  double *gx = g;
+  double *gy = gx + g_size;
+  double *gz = gy + g_size;
+  double *fx = f;
+  double *fy = fx + g_size;
+  double *fz = fy + g_size;
   int i, j, k, ptr;
 
 
@@ -277,12 +272,9 @@ void GTO_ft_x1i(double *f, double *g, double ri[3], int li, int lj,
     for (i = ptr; i <= ptr + li; i++) {
 #pragma GCC ivdep
       for (k = 0; k < bs; k++) {
-        fxR[i * bs + k] = gxR[(i + 1) * bs + k] + ri[0] * gxR[i * bs + k];
-        fxI[i * bs + k] = gxI[(i + 1) * bs + k] + ri[0] * gxI[i * bs + k];
-        fyR[i * bs + k] = gyR[(i + 1) * bs + k] + ri[1] * gyR[i * bs + k];
-        fyI[i * bs + k] = gyI[(i + 1) * bs + k] + ri[1] * gyI[i * bs + k];
-        fzR[i * bs + k] = gzR[(i + 1) * bs + k] + ri[2] * gzR[i * bs + k];
-        fzI[i * bs + k] = gzI[(i + 1) * bs + k] + ri[2] * gzI[i * bs + k];
+        fx[i * bs + k] = gx[(i + 1) * bs + k] + ri[0] * gx[i * bs + k];
+        fy[i * bs + k] = gy[(i + 1) * bs + k] + ri[1] * gy[i * bs + k];
+        fz[i * bs + k] = gz[(i + 1) * bs + k] + ri[2] * gz[i * bs + k];
       }
     }
   }
@@ -293,18 +285,12 @@ void GTO_ft_x1j(double *f, double *g, double rj[3], int li, int lj,
   int dj = envs->g_stride_j;
   int bs = envs->block_size;
   size_t g_size = envs->g_size * bs;
-  double *gxR = g;
-  double *gyR = gxR + g_size;
-  double *gzR = gyR + g_size;
-  double *gxI = gzR + g_size;
-  double *gyI = gxI + g_size;
-  double *gzI = gyI + g_size;
-  double *fxR = f;
-  double *fyR = fxR + g_size;
-  double *fzR = fyR + g_size;
-  double *fxI = fzR + g_size;
-  double *fyI = fxI + g_size;
-  double *fzI = fyI + g_size;
+  double *gx = g;
+  double *gy = gx + g_size;
+  double *gz = gy + g_size;
+  double *fx = f;
+  double *fy = fx + g_size;
+  double *fz = fy + g_size;
   int i, j, k, ptr;
 
   for (j = 0; j <= lj; j++) {
@@ -313,12 +299,9 @@ void GTO_ft_x1j(double *f, double *g, double rj[3], int li, int lj,
     for (i = ptr; i <= ptr + li; i++) {
 #pragma GCC ivdep
       for (k = 0; k < bs; k++) {
-        fxR[i * bs + k] = gxR[(i + dj) * bs + k] + rj[0] * gxR[i * bs + k];
-        fxI[i * bs + k] = gxI[(i + dj) * bs + k] + rj[0] * gxI[i * bs + k];
-        fyR[i * bs + k] = gyR[(i + dj) * bs + k] + rj[1] * gyR[i * bs + k];
-        fyI[i * bs + k] = gyI[(i + dj) * bs + k] + rj[1] * gyI[i * bs + k];
-        fzR[i * bs + k] = gzR[(i + dj) * bs + k] + rj[2] * gzR[i * bs + k];
-        fzI[i * bs + k] = gzI[(i + dj) * bs + k] + rj[2] * gzI[i * bs + k];
+        fx[i * bs + k] = gx[(i + dj) * bs + k] + rj[0] * gx[i * bs + k];
+        fy[i * bs + k] = gy[(i + dj) * bs + k] + rj[1] * gy[i * bs + k];
+        fz[i * bs + k] = gz[(i + dj) * bs + k] + rj[2] * gz[i * bs + k];
       }
     }
   }
