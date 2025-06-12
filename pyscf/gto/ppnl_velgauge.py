@@ -92,6 +92,82 @@ def get_gth_pp_nl_velgauge(mol, A_over_c):
         vppnl += np.einsum('ilp,ij,jlq->pq', ilp.conj(), hl, ilp)
     return vppnl
 
+
+def get_ppnl_half_rc(mol, A_over_c, origin=(0,0,0)):
+    from pyscf.pbc.gto.pseudo import pp_int
+    from pyscf.df import incore
+    fakemol, hl_blocks = pp_int.fake_cell_vnl(mol)
+    hl_dims = np.array([len(hl) for hl in hl_blocks])
+    _bas = fakemol._bas
+
+    ppnl_half = []
+    ppnl_rc_half = []
+
+    intors = ('GTO_ft_ovlp', 'GTO_ft_r2_origi', 'GTO_ft_r4_origi')
+    intors_rc = ('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi')
+
+    for i, (intor, intor_rc) in enumerate( zip(intors, intors_rc) ):
+        fakemol._bas = _bas[hl_dims>i]
+        if fakemol.nbas > 0:
+            ppnl_half.append(_ft_ao_cross(intor, fakemol, mol, Gv=A_over_c.reshape(1,3)))
+            with fakemol.with_common_origin(origin):
+                ppnl_rc_half.append(_ft_ao_cross(intor_rc, fakemol, mol, Gv=A_over_c.reshape(1,3), comp=3))
+        else:
+            ppnl_half.append(None)
+            ppnl_rc_half.append(None)
+    fakemol._bas = _bas
+
+    return ppnl_half, ppnl_rc_half
+
+def get_gth_pp_nl_velgauge_commutator(mol, A_over_c, origin=(0,0,0)):
+    from pyscf.pbc.gto.pseudo import pp_int
+    from pyscf.df import incore
+    fakemol, hl_blocks = pp_int.fake_cell_vnl(mol)
+    hl_dims = np.array([len(hl) for hl in hl_blocks])
+    _bas = fakemol._bas
+
+    ppnl_half = []
+    ppnl_rc_half = []
+
+    intors = ('GTO_ft_ovlp', 'GTO_ft_r2_origi', 'GTO_ft_r4_origi')
+    intors_rc = ('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi')
+
+    for i, (intor, intor_rc) in enumerate( zip(intors, intors_rc) ):
+        fakemol._bas = _bas[hl_dims>i]
+        if fakemol.nbas > 0:
+            ppnl_half.append(_ft_ao_cross(intor, fakemol, mol, Gv=A_over_c.reshape(1,3)))
+            with fakemol.with_common_origin(origin):
+                ppnl_rc_half.append(_ft_ao_cross(intor_rc, fakemol, mol, Gv=A_over_c.reshape(1,3), comp=3))
+        else:
+            ppnl_half.append(None)
+            ppnl_rc_half.append(None)
+    fakemol._bas = _bas
+
+#    return ppnl_half, ppnl_rc_half
+
+    nao = mol.nao
+    vppnl_commutator = np.zeros((3, nao, nao), dtype=np.complex128)
+    offset = [0] * 3
+    for ib, hl in enumerate(hl_blocks):
+        l = fakemol.bas_angular(ib)
+        nd = 2 * l + 1
+        hl_dim = hl.shape[0]
+        ilp = np.empty((hl_dim, nd, nao), dtype=np.complex128)
+        rc_ilp = np.empty((3, hl_dim, nd, nao), dtype=np.complex128)
+        for i in range(hl_dim):
+            p0 = offset[i]
+            if ppnl_half[i] is None:
+                ilp[i] = 0.
+                rc_ilp[:,i] = 0.
+            else:
+                ilp[i] = ppnl_half[i][p0:p0+nd]
+                rc_ilp[:,i] = ppnl_rc_half[i][:, p0:p0+nd]
+            offset[i] = p0 + nd
+        vppnl_commutator += np.einsum('xilp,ij,jlq->xpq', rc_ilp.conj(), hl, ilp)
+        vppnl_commutator -= np.einsum('ilp,ij,xjlq->xpq', ilp.conj(), hl, rc_ilp)
+    return vppnl_commutator
+
+
 def _ft_ao_cross(intor, fakemol, mol, Gv, q=np.zeros(3),
                 comp=1):
     # Normally you only need one point in reciprocal space at a time.
@@ -111,11 +187,19 @@ def _ft_ao_cross(intor, fakemol, mol, Gv, q=np.zeros(3),
     # AO basis functions in the second index.
     shls_slice = (mol.nbas, nbas_conc, 0, mol.nbas)
 
-    return ft_ao.ft_aopair(mol_conc_fakemol,
+    ret = ft_ao.ft_aopair(mol_conc_fakemol,
                             Gv,
                             q=q,
                             shls_slice=shls_slice,
                             aosym='s1',
                             intor=intor,
                             return_complex=True,
-                            comp=comp)[0]
+                            comp=comp)
+
+    if comp == 1:
+        # Gv is a single vector
+        ret = ret[0]
+    else:
+        # Gv is a single vector, but we have multiple components
+        ret = ret[:, 0, :, :]
+    return ret
