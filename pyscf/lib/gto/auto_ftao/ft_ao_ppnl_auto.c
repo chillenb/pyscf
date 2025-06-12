@@ -16,6 +16,9 @@
 #define G1E_RCI(f, g, li, lj, lk)   GTO_ft_x1i(f, g, dri, li, lj, envs);
 #define G1E_RCJ(f, g, li, lj, lk)   GTO_ft_x1j(f, g, drj, li, lj, envs);
 
+#define G1E_R0I(f, g, li, lj, lk)   GTO_ft_x1i(f, g, envs->ri, li, lj, envs);
+#define G1E_R0J(f, g, li, lj, lk)   GTO_ft_x1j(f, g, envs->rj, li, lj, envs);
+
 #define ZMAD_MUL(outR, outI, gx, gy, gz, factor) \
         xyR = gx##R[ix*bs+k] * gy##R[iy*bs+k] - gx##I[ix*bs+k] * gy##I[iy*bs+k]; \
         xyI = gx##R[ix*bs+k] * gy##I[iy*bs+k] + gx##I[ix*bs+k] * gy##R[iy*bs+k]; \
