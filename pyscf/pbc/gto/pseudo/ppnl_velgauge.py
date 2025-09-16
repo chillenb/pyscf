@@ -40,7 +40,10 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None):
     nkpts = len(kpts_lst)
 
     fakecell, hl_blocks = fake_cell_vnl(cell)
-    ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3))
+
+    q = -A_over_c.reshape(1,3)
+
+    ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q)
     nao = cell.nao_nr()
 
     # ppnl_half could be complex, so _contract_ppnl will not work.
@@ -63,7 +66,7 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None):
                 p0 = offset[i]
                 ilp[i] = ppnl_half[i][k][p0:p0+nd]
                 offset[i] = p0 + nd
-            ppnl[k] += np.einsum('ilp,ij,jlq->pq', ilp, hl, ilp.conj())
+            ppnl[k] += np.einsum('ilp,ij,jlq->pq', ilp.conj(), hl, ilp)
 
     if kpts is None or np.shape(kpts) == (3,):
         ppnl = ppnl[0]
