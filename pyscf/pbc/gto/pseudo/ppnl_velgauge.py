@@ -81,7 +81,9 @@ def get_gth_pp_nl_velgauge_commutator(cell, A_over_c, kpts=None, origin=(0,0,0))
 
     fakecell, hl_blocks = fake_cell_vnl(cell)
     ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3))
-    ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3), intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'), comp=3, origin=origin)
+    ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3),
+                               intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'),
+                               comp=3, origin=origin)
 
     nao = cell.nao_nr()
 
@@ -122,7 +124,9 @@ def get_gth_ppnl_rc(cell, A_over_c, kpts=None, origin=(0,0,0)):
 
     fakecell, hl_blocks = fake_cell_vnl(cell)
     ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3))
-    ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3), intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'), comp=3, origin=origin)
+    ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3),
+                               intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'),
+                               comp=3, origin=origin)
     return ppnl_half, ppnl_rc_half
 
 # Modified version of _int_vnl in pyscf.pbc.gto.pseudo.pp_int
