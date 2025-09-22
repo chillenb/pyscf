@@ -4,12 +4,13 @@ import numpy as np
 from pyscf import lib
 from pyscf.pbc import gto as pgto
 from pyscf.pbc.df import ft_ao as pft_ao
-from pyscf.pbc.gto.pseudo.ppnl_velgauge import get_pp_nl_velgauge
+from pyscf.pbc.gto.pseudo.ppnl_velgauge import get_pp_nl_velgauge, get_pp_nl_velgauge_commutator
 
 
 # Reference values obtained from https://github.com/pyscf/pyscf-forge/pull/136
 # (K. Hanasaki),
-# function pyscf.rttddft.gto_ps_pp_int01.get_pp_nl01
+# functions pyscf.rttddft.gto_ps_pp_int01.get_pp_nl01,
+#           pyscf.rttddft.gto_ps_pp_int01.get_pp_nl01xx
 
 def test_pp_velgauge1():
     cell = pgto.Cell()
@@ -71,3 +72,43 @@ def test_pp_velgauge3():
 
     assert new_vals.shape == ref_vals.shape
     assert np.allclose(ref_vals, new_vals)
+
+
+def test_ppxx_velgauge1():
+    cell = pgto.Cell()
+    cell.verbose = 0
+    cell.atom = 'C 0 0 0; C 1 1 1; C 0 2 2; C 2 0 2'
+    cell.a = np.diag([4, 4, 4])
+    cell.basis = 'gth-szv'
+    cell.pseudo = 'gth-pade'
+    cell.mesh = [20]*3
+    cell.build()
+
+    A_over_c = np.array([3.0,-0.3,0.1])
+    kpts = np.array([[0, 0, 0]])
+    fspath = pathlib.Path(__file__).parent / "ppxx_refvals1.npy"
+    ref_vals = np.load(fspath).transpose(1,0,2,3)
+
+    new_vals = get_pp_nl_velgauge_commutator(cell, A_over_c=A_over_c, kpts=kpts)
+
+    assert np.allclose(ref_vals, new_vals)
+
+def test_ppxx_velgauge2():
+    cell = pgto.Cell()
+    cell.verbose = 0
+    cell.atom = 'C 0 0 0; C 1 1 1; C 0 2 2; C 2 0 2'
+    cell.a = np.diag([4, 4, 4])
+    cell.basis = 'gth-szv'
+    cell.pseudo = 'gth-pade'
+    cell.mesh = [20]*3
+    cell.build()
+
+    A_over_c = np.array([3.0,-0.3,0.1])
+    kpts = np.array([[-0.1,0.0,0.3]])
+    fspath = pathlib.Path(__file__).parent / "ppxx_refvals2.npy"
+    ref_vals = np.load(fspath).transpose(1,0,2,3)
+
+    new_vals = get_pp_nl_velgauge_commutator(cell, A_over_c=A_over_c, kpts=kpts)
+
+    assert np.allclose(ref_vals, new_vals)
+
