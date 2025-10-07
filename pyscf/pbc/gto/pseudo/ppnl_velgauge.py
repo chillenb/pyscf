@@ -24,15 +24,42 @@ For GTH/HGH PPs, see:
 '''
 
 import numpy as np
-from pyscf import lib
+from pyscf import lib, __config__
+from pyscf.lib import logger
 from pyscf.pbc import gto as pgto
-from pyscf.pbc.df import ft_ao as pft_ao
+from pyscf.pbc.df.ft_ao import estimate_rcut, ExtendedMole, _RangeSeparatedCell
 from pyscf.pbc.gto.pseudo.pp_int import fake_cell_vnl
+from pyscf.pbc.tools import k2gamma
+
+
+RCUT_THRESHOLD = getattr(__config__, 'pbc_scf_rsjk_rcut_threshold', 1.0)
+# kecut=10 can roughly converge GTO with alpha=0.5
+KECUT_THRESHOLD = getattr(__config__, 'pbc_scf_rsjk_kecut_threshold', 10.0)
+
 
 libpbc = lib.load_library('libpbc')
 
 
-def get_pp_nl_velgauge(cell, A_over_c, kpts=None):
+def get_pp_nl_velgauge(cell, A_over_c, kpts=None, vgppnl_helper=None):
+    """Nonlocal part of GTH pseudopotential in velocity gauge.
+
+    Parameters
+    ----------
+    cell : pyscf.pbc.gto.Cell
+        System cell
+    A_over_c : np.ndarray
+        Scaled magnetic vector potential. Shape is (3,)
+    kpts : np.ndarray, optional
+        k-point list.
+    vgppnl_helper : VelGaugePPNLHelper, optional
+        Helper object for velocity gauge PP integrals. By default None
+        which causes a new helper object to be created and built.
+    Returns
+    -------
+    tuple
+        (ppnl, vgppnl_helper) where ppnl is an ndarray of shape (nkpts, nao, nao)
+        and vgppnl_helper is the VelGaugePPNLHelper object used to compute the integrals.
+    """
     if kpts is None:
         kpts_lst = np.zeros((1,3))
     else:
@@ -43,7 +70,13 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None):
 
     q = -A_over_c.reshape(1,3)
 
-    ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q)
+    if vgppnl_helper is None:
+        vgppnl_helper = VelGaugePPNLHelper(cell, kpts=kpts_lst)
+        vgppnl_helper.build()
+
+
+    #ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q)
+    ppnl_half = vgppnl_helper.int_vnl_ft(q)
     nao = cell.nao_nr()
 
     # ppnl_half could be complex, so _contract_ppnl will not work.
@@ -70,9 +103,9 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None):
 
     if kpts is None or np.shape(kpts) == (3,):
         ppnl = ppnl[0]
-    return ppnl
+    return ppnl, vgppnl_helper
 
-def get_pp_nl_velgauge_commutator(cell, A_over_c, kpts=None, origin=(0,0,0)):
+def get_pp_nl_velgauge_commutator(cell, A_over_c, kpts=None, vgppnl_helper=None):
     if kpts is None:
         kpts_lst = np.zeros((1,3))
     else:
@@ -83,10 +116,16 @@ def get_pp_nl_velgauge_commutator(cell, A_over_c, kpts=None, origin=(0,0,0)):
 
     q = -A_over_c.reshape(1,3)
 
-    ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q)
-    ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q,
-                               intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'),
-                               comp=3, origin=origin)
+    if vgppnl_helper is None:
+        vgppnl_helper = VelGaugePPNLHelper(cell, kpts=kpts_lst)
+        vgppnl_helper.build()
+
+    #ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q)
+    ppnl_half = vgppnl_helper.int_vnl_ft(q)
+    ppnl_rc_half = vgppnl_helper.int_vnl_ft(q, rc=True)
+    #ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q,
+                            #    intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'),
+                            #    comp=3, origin=origin)
 
     nao = cell.nao_nr()
 
@@ -117,70 +156,140 @@ def get_pp_nl_velgauge_commutator(cell, A_over_c, kpts=None, origin=(0,0,0)):
             vppnl_commutator[k] -= np.einsum('ilp,ij,xjlq->xpq', ilp.conj(), hl, rc_ilp)
     if kpts is None or np.shape(kpts) == (3,):
         vppnl_commutator = vppnl_commutator[0]
-    return vppnl_commutator
+    return vppnl_commutator, vgppnl_helper
 
-def get_gth_ppnl_rc(cell, A_over_c, kpts=None, origin=(0,0,0)):
-    if kpts is None:
-        kpts_lst = np.zeros((1,3))
-    else:
-        kpts_lst = np.reshape(kpts, (-1,3))
 
-    fakecell, hl_blocks = fake_cell_vnl(cell)
-    ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3))
-    ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, A_over_c.reshape(1,3),
-                               intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'),
-                               comp=3, origin=origin)
-    return ppnl_half, ppnl_rc_half
 
-# Modified version of _int_vnl in pyscf.pbc.gto.pseudo.pp_int
-def _int_vnl_ft(cell, fakecell, hl_blocks, kpts, Gv, q=np.zeros(3),
-                intors=None, comp=1, origin=(0,0,0)):
-    if intors is None:
-        intors = ['GTO_ft_ovlp', 'GTO_ft_r2_origi', 'GTO_ft_r4_origi']
-
-    # Normally you only need one point in reciprocal space at a time.
-    # (this corresponds to one value of the vector potential A)
-    assert Gv.shape[0] == 1, "Gv must be a single vector"
-
-    def int_ket(_bas, intor):
-        if len(_bas) == 0:
-            return []
-
-        # make a copy of the fakecell including only the
-        # basis functions that were passed in.
-        fakecell_trunc = fakecell.copy(deep=True)
-        fakecell_trunc._bas = _bas
-
-        # make an auxiliary cell containing both the
-        # original cell and the fakecell functions
-        cell_conc_fakecell = pgto.conc_cell(cell, fakecell_trunc)
-
-        intor = cell_conc_fakecell._add_suffix(intor)
-        nbas_conc = cell_conc_fakecell.nbas
-
-        # This shls_slice selects all pairs of functions
-        # with GTH projectors in the first index and
-        # AO basis functions in the second index.
-        shls_slice = (cell.nbas, nbas_conc, 0, cell.nbas)
-
-        with cell_conc_fakecell.with_common_origin(origin):
-            retv = pft_ao.ft_aopair_kpts(cell_conc_fakecell,
-                                Gv,
-                                q=q,
-                                shls_slice=shls_slice,
-                                aosym='s1',
-                                intor=intor,
-                                comp=comp,
-                                kptjs=kpts)
-        # Gv is a single vector
-        if comp == 1:
-            retv = retv[:, 0]
+class VelGaugePPNLHelper:
+    """Helper class for evaluating velocity gauge pseudopotential non-local integrals.
+       Useful to avoid recomputing data that only depends on the cell and k-points.
+    """
+    def __init__(self, cell, kpts=None, intors=None, hl_max=3):
+        if kpts is None:
+            kpts_lst = np.zeros((1,3))
         else:
-            retv = retv[:, :, 0]
-        return retv
+            kpts_lst = np.reshape(kpts, (-1,3))
+        nkpts = len(kpts_lst)
+        self.kpts = kpts_lst
+        self.nkpts = nkpts
+        self.cell = cell
+        self.fakecell = None
+        self.hl_blocks = None
+        intors =  ['GTO_ft_ovlp', 'GTO_ft_r2_origi', 'GTO_ft_r4_origi']
+        comm_intors = ['GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi']
+        self.intors = intors
+        self.comm_intors = comm_intors
+        self.ft_data = {}
+        self.hl_max = hl_max
+        self.hl_dims = None
 
+    def build(self):
+        fakecell, hl_blocks = fake_cell_vnl(self.cell)
+        self.fakecell = fakecell
+        self.hl_blocks = hl_blocks
+        hl_dims = np.asarray([len(hl) for hl in hl_blocks])
+        self.hl_dims = hl_dims
+
+        for hl_idx, intor_name in zip(range(self.hl_max), self.intors):
+            shls_slice, ft_kern, cell_conc_fakecell = prepare_ppnl_ft_data(self.cell, self.fakecell, hl_idx, self.hl_blocks, self.kpts,
+                intor=intor_name, comp=1)
+            self.ft_data[intor_name] = (shls_slice, ft_kern, cell_conc_fakecell)
+
+        for hl_idx, intor_name in zip(range(self.hl_max), self.comm_intors):
+            shls_slice, ft_kern, cell_conc_fakecell = prepare_ppnl_ft_data(self.cell, self.fakecell, hl_idx, self.hl_blocks, self.kpts,
+                intor=intor_name, comp=3)
+            self.ft_data[intor_name] = (shls_slice, ft_kern, cell_conc_fakecell)
+
+    def int_vnl_ft(self, Gv, q=np.zeros(3), origin=(0,0,0), rc=False):
+        if rc:
+            comp = 3
+            intors = self.comm_intors
+        else:
+            comp = 1
+            intors = self.intors
+        ft_data = list(self.ft_data[intor_name] for intor_name in intors)
+
+        # Normally you only need one point in reciprocal space at a time.
+        # (this corresponds to one value of the vector potential A)
+        assert Gv.shape[0] == 1, "Gv must be a single vector"
+
+        def int_ket(ft_data_this_hl):
+            shls_slice, ft_kern, cell_conc_fakecell = ft_data_this_hl
+            with cell_conc_fakecell.with_common_origin(origin):
+                retv = ft_kern(Gv, None, None, q, self.kpts, shls_slice)
+            # Gv is a single vector
+            if comp == 1:
+                retv = retv[:, 0]
+            else:
+                retv = retv[:, :, 0]
+            return retv
+
+        out = (int_ket(ft_data[0]),
+            int_ket(ft_data[1]),
+            int_ket(ft_data[2]))
+        return out
+
+
+def prepare_ppnl_ft_data(cell, fakecell, hl_idx, hl_blocks, kpts, intor, comp=1):
+    """Prepare ft_kernel methods for fast evaluation of velocity gauge ppnl integrals
+
+    Parameters
+    ----------
+    cell : pyscf.pbc.gto.Cell
+        System cell
+    fakecell : pyscf.pbc.gto.Cell
+        Fake cell containing GTH projectors
+    hl_idx : int
+        GTH projector angular momentum index
+    hl_blocks : list
+        GTH hl blocks
+    kpts : np.ndarray
+        k-points
+    intor : str
+        GTO ft-ao integral name
+    comp : int, optional
+        Size of each integral (eg scalar=1, vector=3), by default 1
+
+    Returns
+    -------
+    tuple
+        shls_slice, ft_kern, cell_conc_fakecell
+    """
     hl_dims = np.asarray([len(hl) for hl in hl_blocks])
-    out = (int_ket(fakecell._bas[hl_dims>0], intors[0]),
-           int_ket(fakecell._bas[hl_dims>1], intors[1]),
-           int_ket(fakecell._bas[hl_dims>2], intors[2]))
-    return out
+    fakecell_trunc = fakecell.copy(deep=True)
+    fakecell_trunc._bas = fakecell_trunc._bas[hl_dims>hl_idx]
+    cell_conc_fakecell = pgto.conc_cell(cell, fakecell_trunc)
+    intor = cell_conc_fakecell._add_suffix(intor)
+    nbas_conc = cell_conc_fakecell.nbas
+    shls_slice = (cell.nbas, nbas_conc, 0, cell.nbas)
+
+    # TIt's necessary to cache this because get_lattice_Ls is slow.
+    ft_kern = ft_aopair_kpts_kern(cell_conc_fakecell, aosym='s1', kptjs=kpts,
+                                    intor=intor, comp=comp)
+    return shls_slice, ft_kern, cell_conc_fakecell
+
+
+def ft_aopair_kpts_kern(cell, aosym='s1', kptjs=np.zeros((1,3)), intor='GTO_ft_ovlp', comp=1, bvk_kmesh=None):
+    r'''
+    Fourier transform AO pair for a group of k-points
+    \sum_T exp(-i k_j * T) \int exp(-i(G+q)r) i(r) j(r-T) dr^3
+
+    Modified version of pyscf.pbc.df.ft_ao.ft_aopair_kpts that returns
+    the generated ft kernel.
+    '''
+    log = logger.new_logger(cell)
+    kptjs = np.asarray(kptjs, order='C').reshape(-1,3)
+
+    rs_cell = _RangeSeparatedCell.from_cell(cell, KECUT_THRESHOLD,
+                                            RCUT_THRESHOLD, log)
+    if bvk_kmesh is None:
+        bvk_kmesh = k2gamma.kpts_to_kmesh(cell, kptjs)
+        log.debug2('Set bvk_kmesh = %s', bvk_kmesh)
+    rcut = estimate_rcut(rs_cell)
+    supmol = ExtendedMole.from_cell(rs_cell, bvk_kmesh, rcut.max(), log)
+    supmol = supmol.strip_basis(rcut)
+
+    ft_kern = supmol.gen_ft_kernel(aosym, intor=intor, comp=comp,
+                                   return_complex=True, verbose=log)
+
+    return ft_kern
