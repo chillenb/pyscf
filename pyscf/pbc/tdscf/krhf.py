@@ -31,6 +31,7 @@ from pyscf.pbc import scf
 from pyscf.pbc.tdscf.rhf import TDBase
 from pyscf.pbc.scf import _response_functions  # noqa
 from pyscf.pbc.lib.kpts_helper import is_gamma_point, get_kconserv_ria, conj_mapping
+from pyscf.pbc.gto.pseudo.ppnl_velgauge import VelGaugePPNLHelper, get_pp_nl_velgauge, get_pp_nl_velgauge_commutator
 from pyscf.pbc.df.df_ao2mo import warn_pbc2d_eri
 from pyscf.pbc import df as pbcdf
 from pyscf.data import nist
@@ -158,6 +159,188 @@ def get_ab(mf, kshift=0):
 
     return a, b
 
+
+def transition_velocity_dipole(tdobj, xy=None):
+    '''Transition dipole moments in the velocity gauge (imaginary part only)
+    '''
+    ints_p = numpy.asarray(tdobj.cell.pbc_intor('int1e_ipovlp', comp=3, hermi=0, kpts=tdobj._scf.kpts))
+    if tdobj.cell.pseudo:
+        r_vnl_commutator, _ = get_pp_nl_velgauge_commutator(tdobj.cell, A_over_c=numpy.zeros(3), kpts=tdobj._scf.kpts)
+    else:
+        r_vnl_commutator = 0.0
+    # velocity operator = p - i[r, V_nl]
+    # Because int1e_ipovlp is ( nabla \| ) = ( \| -nabla ) = p / i, we have
+    # Im [ vel. ] = int1e_ipovlp - [ r, V_nl ].
+    # vel. = 1j * int1e_ipovlp - 1j * [ r, V_nl ].
+    velocity_operator = 1.0j * ints_p - 1.0j * r_vnl_commutator
+    v = tdobj._contract_multipole(velocity_operator, hermi=False, xy=xy)
+    return v
+
+def _contract_multipole(tdobj, ints, hermi=True, xy=None):
+    '''ints is the integral tensor of a spin-independent operator'''
+    if xy is None: xy = tdobj.xy
+    nstates = len(xy[0])
+    nkpts = ints.shape[0]
+    pol_shape = ints.shape[1:-2]
+    nao = ints.shape[-1]
+
+    if not tdobj.singlet:
+        return numpy.zeros((nstates,) + pol_shape)
+
+    mo_coeff = tdobj._scf.mo_coeff
+    mo_occ = numpy.asarray(tdobj._scf.mo_occ)
+    occidx = [mo_occ[k]==2 for k in range(nkpts)]
+    viridx = [mo_occ[k]==0 for k in range(nkpts)]
+    orbo = [mo_coeff[k][:,occidx[k]] for k in range(nkpts)]
+    orbv = [mo_coeff[k][:,viridx[k]] for k in range(nkpts)]
+    npol = numpy.prod(pol_shape)
+
+    pols = []
+
+    for rep_xy in xy:
+        pol = numpy.zeros((nstates, npol), dtype=numpy.result_type(*mo_coeff, *ints))
+        for ki in range(nkpts):
+            orbo_k = orbo[ki]
+            orbv_k = orbv[ki]
+            ints_mo_k = lib.einsum('xpq,pi,qj->xij', ints[ki].reshape(npol, nao, nao), orbo_k, orbv_k.conj())
+            pol += numpy.array([numpy.einsum('xij,ij->x', ints_mo_k, x[ki]) * 2 for x,y in rep_xy])
+            if hasattr(rep_xy[0][1], '__getitem__'): # not TDA, thank you dynamic typing for making this hard
+                if hermi:
+                    pol += numpy.array([numpy.einsum('xij,ij->x', ints_mo_k, y[ki]) * 2 for x,y in rep_xy])
+                else:  # anti-Hermitian
+                    pol -= numpy.array([numpy.einsum('xij,ij->x', ints_mo_k, y[ki]) * 2 for x,y in rep_xy])
+        pol = pol.reshape((nstates,) + pol_shape)
+        pols.append(pol)
+    return pols
+
+def oscillator_strength(tdobj, e=None, xy=None, gauge='velocity', order=0):
+    if e is None:
+        e = tdobj.e
+
+    if gauge.lower() == 'velocity':
+        # Ref. JCP, 143, 234103
+        trans_dip = transition_velocity_dipole(tdobj, xy)
+        strengths = []
+        for e_rep, trans_dip_rep in zip(e, trans_dip):
+            f = 2./3. * numpy.einsum('s,sx,sx->s', 1./e_rep, trans_dip_rep, trans_dip_rep.conj()).real
+            strengths.append(f)
+    else:
+        raise NotImplementedError
+
+    return strengths
+
+
+def transverse_dielectric(tdobj, e=None, xy=None, gauge='velocity', pol_vector=None, freqs=None, eta=1e-3):
+    """Imaginary part of the transverse dielectric constant
+
+    Parameters
+    ----------
+    tdobj : KTDBase or one of its derived classes
+        TDDFT object
+    e : Nested list, standard garbage pattern
+        Excitation energies
+    xy : Nested list, standard garbage pattern
+        TDDFT excited states
+    gauge : str, optional
+        gauge, by default 'velocity' (this is the only choice right now)
+    pol_vector: numpy.ndarray shape (3,)
+        Polarization vector
+    freqs : numpy.ndarray
+        Frequencies at which to evaluate the dielectric constant
+
+    Returns
+    -------
+    numpy.ndarray
+        Imaginary part of the dielectric constant at the specified frequencies
+    """
+    if e is None:
+        e = tdobj.e
+
+    pol_vector = numpy.asarray(pol_vector)
+    pol_vector = pol_vector / numpy.linalg.norm(pol_vector)
+    cond = dynamical_conductivity(tdobj, e, xy, gauge, pol_vector, freqs, eta)
+    diel = [4 * numpy.pi * c / freqs for c in cond]
+    return diel
+
+
+def dynamical_conductivity(tdobj, e=None, xy=None, gauge='velocity', pol_vector=None, freqs=None, eta=1e-3):
+    """Real part of the dynamical conductivity
+
+    Parameters
+    ----------
+    tdobj : KTDBase or one of its derived classes
+        TDDFT object
+    e : Nested list, standard garbage pattern
+        Excitation energies
+    xy : Nested list, standard garbage pattern
+        TDDFT excited states
+    gauge : str, optional
+        gauge, by default 'velocity' (this is the only choice right now)
+    pol_vector: numpy.ndarray shape (3,)
+        Polarization vector
+    freqs : numpy.ndarray
+        Frequencies at which to evaluate the dielectric constant
+
+    Returns
+    -------
+    numpy.ndarray
+        Real part of the dynamical conductivity at the specified frequencies
+    """
+    if e is None:
+        e = tdobj.e
+
+    pol_vector = numpy.asarray(pol_vector)
+    pol_vector = pol_vector / numpy.linalg.norm(pol_vector)
+    def lorentz_broad(w, w0, eta):
+        # approximate a delta function by eta/(pi*((w-w0)^2+eta^2))
+        return eta / (numpy.pi * ((w-w0)**2 + eta**2))
+
+    if gauge.lower() == 'velocity':
+        # Ref. JCP, 143, 234103
+        trans_dip = transition_velocity_dipole(tdobj, xy)
+        cond = []
+        for e_rep, trans_dip_rep in zip(e, trans_dip):
+            pol_dot_dip = numpy.einsum('sx,x->s', trans_dip_rep, pol_vector)
+            pol_dot_dip_sqr = numpy.real(pol_dot_dip * pol_dot_dip.conj())
+            f = numpy.zeros_like(freqs)
+            for s in range(len(e_rep)):
+                f += 4 / (freqs) * pol_dot_dip_sqr[s] * lorentz_broad(freqs, e_rep[s], eta)
+            cond.append(f)
+    else:
+        raise NotImplementedError
+
+    return cond
+
+def dipole_spectral_function(tdobj, e=None, xy=None, gauge='length', freqs=None, eta=1e-3):
+    """Dipole spectral function, scaled such that it agrees with the molecular
+    dipole spectral function in the limit of a large box.
+
+    S(omega) = sum_n f_n delta(omega - Omega_n)
+    """
+    if e is None:
+        e = tdobj.e
+    f = oscillator_strength(tdobj, e=e, xy=xy, gauge=gauge)
+
+    def lorentz_broad(w, w0, eta):
+        # approximate a delta function by eta/(pi*((w-w0)^2+eta^2))
+        return eta / (numpy.pi * ((w-w0)**2 + eta**2))
+    spec = numpy.zeros_like(freqs)
+    for e_rep, f_rep in zip(e, f):
+        for ei, fi in zip(e_rep, f_rep):
+            spec += fi * lorentz_broad(freqs, ei, eta)
+    return spec
+
+def photoabsorption_cross_section(tdobj, e=None, xy=None, gauge='length', freqs=None, eta=1e-3):
+    """Direction-averaged photoabsorption cross section.
+    sigma(omega) = 2 pi^2 / c * S(omega)
+
+    This quantity is rarely used for periodic systems. Mainly used for
+    comparison with molecular results in the limit of a large box.
+    """
+    spec = dipole_spectral_function(tdobj, e=e, xy=xy, gauge=gauge, freqs=freqs, eta=eta)
+    # sigma = 2 pi^2 S(omega) / c
+    return 2 * numpy.pi**2 * spec / nist.LIGHT_SPEED
+
 class KTDBase(TDBase):
     '''
     Attributes:
@@ -224,7 +407,13 @@ class KTDBase(TDBase):
             logger.note(self, 'kshift = %d  Excited State energies (eV)\n%s',
                         kshift, self.e[k] * nist.HARTREE2EV)
         return self
-
+    _contract_multipole            = _contract_multipole
+    transition_velocity_dipole     = transition_velocity_dipole
+    oscillator_strength            = oscillator_strength
+    transverse_dielectric          = transverse_dielectric
+    dynamical_conductivity         = dynamical_conductivity
+    dipole_spectral_function       = dipole_spectral_function
+    photoabsorption_cross_section  = photoabsorption_cross_section
     get_nto = lib.invalid_method('get_nto')
 
 class TDA(KTDBase):
