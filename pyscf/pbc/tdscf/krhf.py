@@ -165,7 +165,7 @@ def transition_velocity_dipole(tdobj, xy=None):
     '''
     ints_p = numpy.asarray(tdobj.cell.pbc_intor('int1e_ipovlp', comp=3, hermi=0, kpts=tdobj._scf.kpts))
     if tdobj.cell.pseudo:
-        r_vnl_commutator, _ = get_pp_nl_velgauge_commutator(tdobj.cell, A_over_c=numpy.zeros(3), kpts=tdobj._scf.kpts)
+        r_vnl_commutator, _ = get_pp_nl_velgauge_commutator(tdobj.cell, q=numpy.zeros(3), kpts=tdobj._scf.kpts)
     else:
         r_vnl_commutator = 0.0
     # velocity operator = p - i[r, V_nl]

@@ -40,7 +40,7 @@ KECUT_THRESHOLD = getattr(__config__, 'pbc_scf_rsjk_kecut_threshold', 10.0)
 libpbc = lib.load_library('libpbc')
 
 
-def get_pp_nl_velgauge(cell, A_over_c, kpts=None, vgppnl_helper=None):
+def get_pp_nl_velgauge(cell, q, kpts=None, vgppnl_helper=None):
     """Nonlocal part of GTH pseudopotential in velocity gauge.
 
     Parameters
@@ -68,7 +68,7 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None, vgppnl_helper=None):
 
     fakecell, hl_blocks = fake_cell_vnl(cell)
 
-    q = -A_over_c.reshape(1,3)
+    q = -q.reshape(1,3)
 
     if vgppnl_helper is None:
         vgppnl_helper = VelGaugePPNLHelper(cell, kpts=kpts_lst)
@@ -105,7 +105,7 @@ def get_pp_nl_velgauge(cell, A_over_c, kpts=None, vgppnl_helper=None):
         ppnl = ppnl[0]
     return ppnl, vgppnl_helper
 
-def get_pp_nl_velgauge_commutator(cell, A_over_c, kpts=None, vgppnl_helper=None):
+def get_pp_nl_velgauge_commutator(cell, q, kpts=None, vgppnl_helper=None):
     if kpts is None:
         kpts_lst = np.zeros((1,3))
     else:
@@ -114,24 +114,16 @@ def get_pp_nl_velgauge_commutator(cell, A_over_c, kpts=None, vgppnl_helper=None)
 
     fakecell, hl_blocks = fake_cell_vnl(cell)
 
-    q = -A_over_c.reshape(1,3)
+    q = -q.reshape(1,3)
 
     if vgppnl_helper is None:
         vgppnl_helper = VelGaugePPNLHelper(cell, kpts=kpts_lst)
         vgppnl_helper.build()
 
-    #ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q)
     ppnl_half = vgppnl_helper.int_vnl_ft(q)
     ppnl_rc_half = vgppnl_helper.int_vnl_ft(q, rc=True)
-    #ppnl_rc_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q,
-                            #    intors=('GTO_ft_rc', 'GTO_ft_rc_r2_origi', 'GTO_ft_rc_r4_origi'),
-                            #    comp=3, origin=origin)
 
     nao = cell.nao_nr()
-
-    # ppnl_half could be complex, so _contract_ppnl will not work.
-    # if gamma_point(kpts_lst):
-    #     return _contract_ppnl(cell, fakecell, hl_blocks, ppnl_half, kpts=kpts)
 
     buf = np.empty((3*9*nao), dtype=np.complex128)
     buf2 = np.empty((3*3*9*nao), dtype=np.complex128)
@@ -164,7 +156,7 @@ class VelGaugePPNLHelper:
     """Helper class for evaluating velocity gauge pseudopotential non-local integrals.
        Useful to avoid recomputing data that only depends on the cell and k-points.
     """
-    def __init__(self, cell, kpts=None, intors=None, hl_max=3):
+    def __init__(self, cell, kpts=None, intors=None, hl_max=3, origin=(0.0, 0.0, 0.0)):
         if kpts is None:
             kpts_lst = np.zeros((1,3))
         else:
@@ -173,6 +165,7 @@ class VelGaugePPNLHelper:
         self.kpts = kpts_lst
         self.nkpts = nkpts
         self.cell = cell
+        self.origin = origin
         self.fakecell = None
         self.hl_blocks = None
         intors =  ['GTO_ft_ovlp', 'GTO_ft_r2_origi', 'GTO_ft_r4_origi']
@@ -192,15 +185,15 @@ class VelGaugePPNLHelper:
 
         for hl_idx, intor_name in zip(range(self.hl_max), self.intors):
             shls_slice, ft_kern, cell_conc_fakecell = prepare_ppnl_ft_data(self.cell, self.fakecell, hl_idx, self.hl_blocks, self.kpts,
-                intor=intor_name, comp=1)
+                intor=intor_name, origin=self.origin, comp=1)
             self.ft_data[intor_name] = (shls_slice, ft_kern, cell_conc_fakecell)
 
         for hl_idx, intor_name in zip(range(self.hl_max), self.comm_intors):
             shls_slice, ft_kern, cell_conc_fakecell = prepare_ppnl_ft_data(self.cell, self.fakecell, hl_idx, self.hl_blocks, self.kpts,
-                intor=intor_name, comp=3)
+                intor=intor_name, origin=self.origin, comp=3)
             self.ft_data[intor_name] = (shls_slice, ft_kern, cell_conc_fakecell)
 
-    def int_vnl_ft(self, Gv, q=np.zeros(3), origin=(0,0,0), rc=False):
+    def int_vnl_ft(self, Gv, q=np.zeros(3), rc=False):
         if rc:
             comp = 3
             intors = self.comm_intors
@@ -215,8 +208,7 @@ class VelGaugePPNLHelper:
 
         def int_ket(ft_data_this_hl):
             shls_slice, ft_kern, cell_conc_fakecell = ft_data_this_hl
-            with cell_conc_fakecell.with_common_origin(origin):
-                retv = ft_kern(Gv, None, None, q, self.kpts, shls_slice)
+            retv = ft_kern(Gv, None, None, q, self.kpts, shls_slice)
             # Gv is a single vector
             if comp == 1:
                 retv = retv[:, 0]
@@ -230,7 +222,7 @@ class VelGaugePPNLHelper:
         return out
 
 
-def prepare_ppnl_ft_data(cell, fakecell, hl_idx, hl_blocks, kpts, intor, comp=1):
+def prepare_ppnl_ft_data(cell, fakecell, hl_idx, hl_blocks, kpts, intor, origin=(0.0, 0.0, 0.0), comp=1):
     """Prepare ft_kernel methods for fast evaluation of velocity gauge ppnl integrals
 
     Parameters
@@ -263,13 +255,13 @@ def prepare_ppnl_ft_data(cell, fakecell, hl_idx, hl_blocks, kpts, intor, comp=1)
     nbas_conc = cell_conc_fakecell.nbas
     shls_slice = (cell.nbas, nbas_conc, 0, cell.nbas)
 
-    # TIt's necessary to cache this because get_lattice_Ls is slow.
+    # It's necessary to cache this because get_lattice_Ls is slow.
     ft_kern = ft_aopair_kpts_kern(cell_conc_fakecell, aosym='s1', kptjs=kpts,
-                                    intor=intor, comp=comp)
+                                    intor=intor, comp=comp, origin=origin)
     return shls_slice, ft_kern, cell_conc_fakecell
 
 
-def ft_aopair_kpts_kern(cell, aosym='s1', kptjs=np.zeros((1,3)), intor='GTO_ft_ovlp', comp=1, bvk_kmesh=None):
+def ft_aopair_kpts_kern(cell, aosym='s1', kptjs=np.zeros((1,3)), intor='GTO_ft_ovlp', comp=1, bvk_kmesh=None, origin=(0.0, 0.0, 0.0)):
     r'''
     Fourier transform AO pair for a group of k-points
     \sum_T exp(-i k_j * T) \int exp(-i(G+q)r) i(r) j(r-T) dr^3
@@ -288,6 +280,8 @@ def ft_aopair_kpts_kern(cell, aosym='s1', kptjs=np.zeros((1,3)), intor='GTO_ft_o
     rcut = estimate_rcut(rs_cell)
     supmol = ExtendedMole.from_cell(rs_cell, bvk_kmesh, rcut.max(), log)
     supmol = supmol.strip_basis(rcut)
+
+    supmol.set_common_orig(origin)
 
     ft_kern = supmol.gen_ft_kernel(aosym, intor=intor, comp=comp,
                                    return_complex=True, verbose=log)

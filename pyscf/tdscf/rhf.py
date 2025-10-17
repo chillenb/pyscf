@@ -506,7 +506,7 @@ def transition_velocity_dipole(tdobj, xy=None):
         # velocity operator = p - i[r, V_nl]
         # Because int1e_ipovlp is ( nabla \| ) = ( \| -nabla ) = p / i, we have
         # Im [ vel. ] = int1e_ipovlp - [ r, V_nl ].
-        ints = ints_p - get_gth_pp_nl_velgauge_commutator(tdobj.mol, A_over_c=numpy.zeros(3))
+        ints = ints_p - get_gth_pp_nl_velgauge_commutator(tdobj.mol, q=numpy.zeros(3))
     else:
         ints = ints_p
     v = tdobj._contract_multipole(ints, hermi=False, xy=xy).real
