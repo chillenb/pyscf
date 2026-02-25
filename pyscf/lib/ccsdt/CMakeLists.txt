@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(ccsdt SHARED rccsdt.c uccsdt.c rccsdtq.c)
-set_target_properties(ccsdt PROPERTIES LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-target_link_libraries(ccsdt ${OPENMP_C_PROPERTIES})
+target_sources(corepyscf PRIVATE
+  rccsdt.c
+  uccsdt.c
+  rccsdtq.c
+)
 
+target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

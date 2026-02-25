@@ -22,17 +22,8 @@ enable_language(Fortran)
 
 set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -std=legacy -fPIC")
 set(CMAKE_VERBOSE_MAKEFILE ON)
-add_library(solvent SHARED
-mnsol_interface.f90
-mnsol_mem.F
-mnsol.F
+target_sources(corepyscf PRIVATE
+  mnsol_interface.f90
+  mnsol_mem.F
+  mnsol.F
 )
-
-#option(BUILD_SHARED_LIBS "build shared libraries" 1)
-#option(ENABLE_STATIC "Enforce static library build" 0)
-#if(ENABLE_STATIC)
-#  set(BUILD_SHARED_LIBS 0)
-#endif()
-
-set_target_properties(solvent PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})

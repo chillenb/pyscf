@@ -12,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(mp SHARED
-  mp2.c)
-add_dependencies(mp np_helper)
+target_sources(corepyscf PRIVATE
+  mp2.c
+)
 
-set_target_properties(mp PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
-target_link_libraries(mp np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

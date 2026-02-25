@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(agf2 SHARED
-  ragf2.c uagf2.c)
-add_dependencies(agf2 cvhf)
+target_sources(corepyscf PRIVATE
+  ragf2.c
+  uagf2.c 
+)
 
-set_target_properties(agf2 PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
-target_link_libraries(agf2 cvhf ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

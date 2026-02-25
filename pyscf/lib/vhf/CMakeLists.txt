@@ -12,14 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(cvhf SHARED 
-  fill_nr_s8.c nr_incore.c nr_direct.c optimizer.c nr_direct_dot.c
-  time_rev.c r_direct_o1.c rkb_screen.c
-  r_direct_dot.c rah_direct_dot.c rha_direct_dot.c
-  hessian_screen.c nr_sgx_direct.c nr_sr_vhf.c)
-add_dependencies(cvhf cgto np_helper)
+target_sources(corepyscf PRIVATE
+  fill_nr_s8.c
+  nr_incore.c
+  nr_direct.c
+  optimizer.c
+  nr_direct_dot.c
+  time_rev.c
+  r_direct_o1.c
+  rkb_screen.c
+  r_direct_dot.c
+  rah_direct_dot.c
+  rha_direct_dot.c
+  hessian_screen.c
+  nr_sgx_direct.c
+  nr_sr_vhf.c
+)
 
-set_target_properties(cvhf PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
-target_link_libraries(cvhf cgto np_helper cint ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

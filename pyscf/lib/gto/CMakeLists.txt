@@ -12,15 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(cgto SHARED 
-  fill_int2c.c fill_nr_3c.c fill_r_3c.c fill_int2e.c fill_r_4c.c
-  ft_ao.c ft_ao_deriv.c ft_ao_ppnl.c fill_grids_int2c.c
-  grid_ao_drv.c deriv1.c deriv2.c nr_ecp.c nr_ecp_deriv.c
-  autocode/auto_eval1.c auto_ftao/ft_ao_ppnl_auto.c)
-add_dependencies(cgto np_helper)
+target_sources(corepyscf PRIVATE
+  fill_int2c.c
+  fill_nr_3c.c
+  fill_r_3c.c
+  fill_int2e.c
+  fill_r_4c.c
+  ft_ao.c
+  ft_ao_deriv.c
+  ft_ao_ppnl.c
+  fill_grids_int2c.c
+  grid_ao_drv.c
+  deriv1.c
+  deriv2.c
+  nr_ecp.c
+  nr_ecp_deriv.c
+  autocode/auto_eval1.c
+  auto_ftao/ft_ao_ppnl_auto.c
+)
 
-set_target_properties(cgto PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
-target_link_libraries(cgto cint np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
-
+target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

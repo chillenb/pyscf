@@ -12,10 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(np_helper SHARED 
-  transpose.c pack_tril.c npdot.c condense.c omp_reduce.c np_helper.c imatcopy.c np_broadcast.c)
+target_sources(corepyscf PRIVATE
+  transpose.c
+  pack_tril.c
+  npdot.c
+  condense.c
+  omp_reduce.c
+  np_helper.c
+  imatcopy.c
+  np_broadcast.c
+)
 
-set_target_properties(np_helper PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
-target_link_libraries(np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

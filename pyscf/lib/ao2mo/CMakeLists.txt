@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(ao2mo SHARED
-  restore_eri.c nr_ao2mo.c nr_incore.c r_ao2mo.c nrr_ao2mo.c)
-add_dependencies(ao2mo cvhf)
+target_sources(corepyscf PRIVATE
+  restore_eri.c
+  nr_ao2mo.c
+  nr_incore.c
+  r_ao2mo.c
+  nrr_ao2mo.c
+)
 
-set_target_properties(ao2mo PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
-target_link_libraries(ao2mo cvhf cint np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

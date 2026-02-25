@@ -12,33 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(dft SHARED
-  CxLebedevGrid.c grid_basis.c nr_numint.c r_numint.c
-  numint_uniform_grid.c xc_deriv.c nr_numint_sparse.c
-  multigrid.c grid_common.c grid_collocate.c grid_integrate.c
+target_sources(corepyscf PRIVATE
+  CxLebedevGrid.c
+  grid_basis.c
+  nr_numint.c
+  r_numint.c
+  numint_uniform_grid.c
+  xc_deriv.c
+  nr_numint_sparse.c
+  multigrid.c
+  grid_common.c
+  grid_collocate.c
+  grid_integrate.c
 )
-add_dependencies(dft cgto cvhf np_helper pbc)
-
-set_target_properties(dft PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 if(ENABLE_LIBXSMM)
   add_definitions(-DHAVE_LIBXSMM)
-  target_link_libraries(dft cvhf cgto cint np_helper pbc xsmm ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
-else()
-  target_link_libraries(dft cvhf cgto cint np_helper pbc ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 endif()
 
 if(ENABLE_LIBXC)
-add_library(xc_itrf SHARED libxc_itrf.c)
-set_target_properties(xc_itrf PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-target_link_libraries(xc_itrf xc ${OPENMP_C_PROPERTIES})
+  target_sources(corepyscf PRIVATE libxc_itrf.c)
 endif()
 
 if(ENABLE_XCFUN)
-add_library(xcfun_itrf SHARED xcfun_itrf.c)
-set_target_properties(xcfun_itrf PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-target_link_libraries(xcfun_itrf xcfun ${OPENMP_C_PROPERTIES})
+  target_sources(corepyscf PRIVATE xcfun_itrf.c)
 endif()
+
+target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

@@ -14,22 +14,14 @@
 
 #include_directories(${CINT_INCLUDE_DIR})
 
-add_library(fci SHARED
-  fci_contract.c fci_contract_nosym.c
-  fci_rdm.c fci_string.c fci_4pdm.c
-  select_ci.c)
-add_dependencies(fci np_helper)
+target_sources(corepyscf PRIVATE
+  fci_contract.c
+  fci_contract_nosym.c
+  fci_rdm.c
+  fci_string.c
+  fci_4pdm.c
+  select_ci.c
+  nevpt_contract.c
+)
 
-set_target_properties(fci PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
-target_link_libraries(fci np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
-
-add_library(mcscf SHARED
-  nevpt_contract.c)
-add_dependencies(mcscf fci np_helper)
-
-set_target_properties(mcscf PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
-target_link_libraries(mcscf fci cvhf ao2mo np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
