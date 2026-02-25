@@ -70,3 +70,10 @@ def safeBcastInPlace(comm, in_array, root=0):
         tmp = in_array[tuple(which_slice)].copy()
         tmp = comm.bcast(tmp,root=0)
         in_array[tuple(which_slice)] = tmp
+
+def allreduce_inplace_contiguous(comm, in_array):
+    if not in_array.flags.c_contiguous or not in_array.flags.c_contiguous:
+        raise ValueError("Input array must be contiguous")
+    view_1d = numpy.reshape(in_array, -1, order='A')
+    for i in range(0, view_1d.size, 2**30):
+        comm.Allreduce(MPI.IN_PLACE, in_array[i : min(i+2**30, view_1d.size)])

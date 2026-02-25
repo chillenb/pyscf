@@ -943,6 +943,13 @@ loop_
         expected = pgto.intor_cross('int1e_ovlp', self.a, self.b, kpts=self.kpts)
         np.testing.assert_allclose(actual, expected, atol=1e-10)
 
+    def test_fractional_nelec(self):
+        cl = pgto.M(
+            a = np.eye(3) * 4.,
+            atom = 'He 0 0 1',
+            basis = [[0, [1, 1]]], nelec_frac=True, charge=0.5)
+        self.assertEqual(cl.nelectron, 1.5)
+        self.assertEqual(pgto.tot_electrons(cl, nkpts=3), 5.5)
 
 if __name__ == '__main__':
     print("Full Tests for pbc.gto.cell")

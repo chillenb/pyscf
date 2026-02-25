@@ -12,10 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required (VERSION 3.22)
-project (pyscf)
+cmake_minimum_required (VERSION 3.25)
+project (pyscf LANGUAGES C VERSION 2.12.1)
 
 include(CheckSymbolExists)
+include(CMakePrintHelpers)
+include(CheckIPOSupported)
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
 
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
@@ -30,37 +34,63 @@ if (CMAKE_COMPILER_IS_GNUCC) # Does it skip the link flag on old OsX?
     set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--no-as-needed")
   endif()
 endif()
-set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
-set(CMAKE_C_STANDARD 99)
 
-option(BUILD_MARCH_NATIVE "gcc flag -march=native" off)
-if (BUILD_MARCH_NATIVE)
-  include(CheckCCompilerFlag)
-  CHECK_C_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
-  if(COMPILER_SUPPORTS_MARCH_NATIVE)
-    if ("${CMAKE_C_COMPILER_ID}" STREQUAL "Intel")
-      message("Add CFLAGS -march=native -unroll-aggressive")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -unroll-aggressive -ipo")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-math-errno")
-    else()
-      message("Add CFLAGS -march=native -ftree-vectorize")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native -funroll-loops -ftree-vectorize")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-math-errno")
-    endif()
-  endif()
-else()
-  if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-    include(CheckCCompilerFlag)
-    CHECK_C_COMPILER_FLAG("-msse3" COMPILER_SUPPORTS_SSE3)
-    if(COMPILER_SUPPORTS_SSE3)
-      # Avoids error "‘SIMDD’ undeclared here (not in a function)" in the qcint two-electron integral interface
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse3")
-    endif()
-  endif()
+# Optimization flags. See cmake/optflags.cmake for details.
+option(BUILD_MARCH_NATIVE "gcc flag -march=native or equivalent" OFF)
+option(ENABLE_VECTOR_MATH "Use vectorized mathematical functions" OFF)
+option(ENABLE_IPO "Use interprocedural optimization (IPO)/link time optimization (LTO)" OFF)
+
+# OpenMP options.
+option(ENABLE_OPENMP "Compiling C extensions with openmp" ON)
+option(FORCE_INTEL_OPENMP "Force use of Intel OpenMP library" OFF)
+
+# FFTW options
+option(ENABLE_FFTW "Using fftw3" OFF)
+option(BUILD_FFTW "Building fftw3" OFF)
+
+# It's recommended to set FORCE_INTEL_OPENMP for performance.
+option(ENABLE_MKL "Use MKL for BLAS, LAPACK and FFT" OFF)
+
+option(ENABLE_SMD "Compiling SMD Fortran code" OFF)
+option(WITH_F12 "Compling F12 integrals" ON)
+option(BUILD_LIBCINT "Building libcint for gaussian integral evaluation" ON)
+option(USE_QCINT "Using the qcint library (optimized for x86-64) for gaussian integral evaluation" OFF)
+option(ENABLE_LIBXC "Using libxc for XC functional library" ON)
+option(ENABLE_XCFUN "Using xcfun for XC functional library" ON)
+option(BUILD_LIBXC "Build libxc if we can't find it" ON)
+option(BUILD_XCFUN "Build xcfun if we can't find it" ON)
+
+option(ENABLE_LIBXSMM "Using libxsmm" OFF)
+option(FIXRPATH "Modify RPATH for building wheels." OFF)
+
+message(STATUS "Summary of provided options:")
+cmake_print_variables(BUILD_MARCH_NATIVE
+  ENABLE_VECTOR_MATH ENABLE_IPO
+  ENABLE_OPENMP FORCE_INTEL_OPENMP
+  ENABLE_FFTW BUILD_FFTW ENABLE_MKL
+  ENABLE_SMD
+  WITH_F12 USE_QCINT
+  ENABLE_LIBXC ENABLE_XCFUN
+  ENABLE_LIBXSMM)
+
+include(cmake/optflags.cmake)
+include(cmake/openmp.cmake)
+include(cmake/mkl.cmake)
+
+if(FIXRPATH)
+  include(cmake/fixrpath.cmake)
 endif()
 
+if(ENABLE_IPO)
+  check_ipo_supported()
+  message(STATUS "Enabled interprocedural optimization (IPO)/link time optimization (LTO)")
+endif()
 
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
+# Enable warnings for supported compilers.
+if(${CMAKE_C_COMPILER_ID} IN_LIST "GNU;Clang;IntelLLVM")
+  list(APPEND PYSCF_OPTFLAGS "-Wall")
+endif()
+
 
 # Architecture specified cmake flags.  See also the templates in
 # pyscf/lib/cmake_arch_config
@@ -68,18 +98,19 @@ if(EXISTS "${PROJECT_SOURCE_DIR}/cmake.arch.inc")
   include("${PROJECT_SOURCE_DIR}/cmake.arch.inc")
 endif()
 
-if (NOT BLAS_LIBRARIES)
-#enable_language(Fortran)
-find_package(BLAS)
-endif()
 check_symbol_exists(ffsll "strings.h" HAVE_FFS)
-#check_function_exists(ffsll HAVE_FFS)
 
+# If MKL was found, BLAS_LIBRARIES will already be set by mkl.cmake.
+# If not, try to find a BLAS library with find_package(BLAS).
+if (NOT BLAS_LIBRARIES)
+  find_package(BLAS)
+endif()
 if (NOT BLAS_LIBRARIES)
   message(FATAL_ERROR "A required library with BLAS API not found.")
 else()
   message(STATUS "BLAS libraries: ${BLAS_LIBRARIES}")
 endif()
+
 # if unable to find mkl library, just create BLAS_LIBRARIES here, e.g.
 # set(BLAS_LIBRARIES "-L/path/to/mkl/lib -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lmkl_avx -lm")
 # or
@@ -92,57 +123,34 @@ endif()
 #
 # These settings can be written in the cmake.arch.inc file. This config file
 # will automatically load all settings specified in cmake.arch.inc
-#
 
-option(ENABLE_OPENMP "Compiling C extensions with openmp" ON)
-set(OPENMP_C_PROPERTIES "")
-if(ENABLE_OPENMP)
-  find_package(OpenMP)
-  if(OPENMP_FOUND)
-    set(HAVE_OPENMP 1)
-    set(OPENMP_C_PROPERTIES OpenMP::OpenMP_C)
-  endif()
-endif()
 
 if(NOT XCFUN_MAX_ORDER)
   set(XCFUN_MAX_ORDER 3)
 endif()
 
-#find_package(PythonInterp REQUIRED)
-#find_package(PythonLibs REQUIRED)
-#execute_process(COMMAND ${PYTHON_EXECUTABLE} -c "import numpy; print(numpy.get_include())"
-#  OUTPUT_VARIABLE NUMPY_INCLUDE)
-#include_directories(${PYTHON_INCLUDE_DIRS} ${NUMPY_INCLUDE})
+if(ENABLE_LIBXC)
+  include(cmake/libxc.cmake)
+endif()
 
-include_directories(${PROJECT_SOURCE_DIR})
-include_directories(${PROJECT_SOURCE_DIR}/deps/include)
-include_directories(${CMAKE_INSTALL_PREFIX}/include)
-link_directories(${PROJECT_SOURCE_DIR}/deps/lib ${PROJECT_SOURCE_DIR}/deps/lib64)
-link_directories(${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib64)
+if(ENABLE_XCFUN)
+  include(cmake/xcfun.cmake)
+endif()
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/config.h.in"
   "${PROJECT_SOURCE_DIR}/config.h")
-# to find config.h
-include_directories("${PROJECT_BINARY_DIR}")
 
 # See also https://gitlab.kitware.com/cmake/community/wikis/doc/cmake/RPATH-handling
 if (WIN32)
   set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
   set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,--disable-runtime-pseudo-reloc")
   set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}")
-elseif (APPLE)
-  set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
-  set(CMAKE_INSTALL_RPATH "@loader_path;@loader_path/deps/lib;@loader_path/deps/lib64")
-  set(CMAKE_BUILD_RPATH "@loader_path;@loader_path/deps/lib;@loader_path/deps/lib64")
-else ()
-  set(CMAKE_SKIP_BUILD_RPATH  True)
-  set(CMAKE_BUILD_WITH_INSTALL_RPATH True)
-  set(CMAKE_INSTALL_RPATH "\$ORIGIN:\$ORIGIN/deps/lib:\$ORIGIN/deps/lib64")
 endif ()
 
-option(ENABLE_FFTW "Using fftw3" OFF)
-option(BUILD_FFTW "Building fftw3" OFF)
+# each subdirectory appends its library targets to
+# PYSCF_TARGETS.
+set(PYSCF_TARGETS)
 
 add_subdirectory(np_helper)
 add_subdirectory(gto)
@@ -153,158 +161,141 @@ add_subdirectory(cc)
 add_subdirectory(ccsdt)
 add_subdirectory(mp)
 add_subdirectory(ri)
-#add_subdirectory(localizer)
 add_subdirectory(pbc)
 add_subdirectory(agf2)
+add_subdirectory(dft)
 
-option(ENABLE_SMD "Compiling SMD Fortran code" OFF)
 if(ENABLE_SMD)
   add_subdirectory(solvent)
 endif(ENABLE_SMD)
 
-# Overwrite CMAKE_C_CREATE_SHARED_LIBRARY in Modules/CMakeCInformation.cmake
-# to remove the SONAME flag in the so file. The soname information causes
-# dynamic link error when importing libcint library.
-set(C_LINK_TEMPLATE "<CMAKE_C_COMPILER> <CMAKE_SHARED_LIBRARY_C_FLAGS> <LANGUAGE_COMPILE_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_C_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES>")
-set(CXX_LINK_TEMPLATE "<CMAKE_CXX_COMPILER> <CMAKE_SHARED_LIBRARY_CXX_FLAGS> <LANGUAGE_COMPILE_FLAGS> <LINK_FLAGS> <CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS> -o <TARGET> <OBJECTS> <LINK_LIBRARIES>")
+if(APPLE)
+    set(ENABLE_LIBXSMM OFF)
+endif()
 
-include(ExternalProject)
-option(BUILD_LIBCINT "Using libcint for analytical gaussian integral" ON)
-option(WITH_F12 "Compling F12 integrals" ON)
-option(USE_QCINT "Using the qcint library (optimized for x86-64) for gaussian integral evaluation" OFF)
+if(ENABLE_MKL AND ENABLE_FFTW)
+  message(FATAL_ERROR "Cannot use both MKL and FFTW for FFT. Please choose only one.")
+endif()
 
 if(BUILD_LIBCINT)
   set(LIBCINT_GIT https://github.com/sunqm/libcint.git) # libcint is a portable, cross-platform implementation
   set(LIBCINT_VERSION v6.2.0)
   if (USE_QCINT)
-    set(LIBCINT_GIT https://github.com/sunqm/qcint.git) # qcint is an optimized implementation for x86-64 architecture
-    set(LIBCINT_VERSION v6.2.0)
+    set(LIBCINT_GIT https://github.com/chillenb/qcint.git) # qcint is an optimized implementation for x86-64 architecture
+    set(LIBCINT_VERSION 98e8a86865df8c7c3ad430fd378319e9650e83c8) # cmakepatch-v6.2.0
     if(NOT BUILD_MARCH_NATIVE)
       message(WARNING "The BUILD_MARCH_NATIVE option is not specified! qcint may not compile unless you explicitly pass compiler flags that turn on vectorization!")
     endif()
   endif()
 
-  ExternalProject_Add(libcint
+  include(FetchContent)
+  FetchContent_Declare(libcint
     GIT_REPOSITORY ${LIBCINT_GIT}
     GIT_TAG ${LIBCINT_VERSION}
-    PREFIX ${PROJECT_BINARY_DIR}/deps
-    INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE
-    CMAKE_CACHE_ARGS
-        -DWITH_F12:STRING=${WITH_F12}
-        -DWITH_RANGE_COULOMB:STRING=1
-        -DWITH_FORTRAN:STRING=0
-        -DWITH_CINT2_INTERFACE:STRING=0
-        -DWITH_4C1E:STRING=1
-        -DMIN_EXPCUTOFF:STRING=20
-        -DKEEP_GOING:STRING=1
-        -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-        -DCMAKE_INSTALL_LIBDIR:PATH=lib
-        -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
-        -DCMAKE_C_CREATE_SHARED_LIBRARY:STRING=${C_LINK_TEMPLATE}
-        -DBUILD_MARCH_NATIVE:STRING=${BUILD_MARCH_NATIVE}
+    FIND_PACKAGE_ARGS
   )
-  add_dependencies(cgto libcint)
-  add_dependencies(ao2mo libcint)
+  message(STATUS "Fetching libcint from ${LIBCINT_GIT} at tag ${LIBCINT_VERSION}")
+  FetchContent_MakeAvailable(libcint)
+  set_target_properties(cint PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+  install(TARGETS cint
+          EXPORT pyscf-targets
+          LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+          RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+          INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  )
 endif() # BUILD_LIBCINT
 
-option(ENABLE_LIBXC "Using libxc for XC functional library" ON)
-option(ENABLE_XCFUN "Using xcfun for XC functional library" ON)
-option(BUILD_LIBXC "Download and build libxc library" ON)
-option(BUILD_XCFUN "Download and build xcfun library" ON)
+# Loop over all library targets.
+foreach(target_lib ${PYSCF_TARGETS})
 
-option(ENABLE_LIBXSMM "Using libxsmm" OFF)
-option(BUILD_LIBXSMM "Building libxsmm" OFF)
-if(APPLE)
-    set(ENABLE_LIBXSMM OFF)
-endif()
+  target_compile_options(${target_lib} PRIVATE ${PYSCF_OPTFLAGS})
+  target_include_directories(${target_lib} PRIVATE ${PROJECT_SOURCE_DIR})
 
-if(NOT DISABLE_DFT)
-add_subdirectory(dft)
-
-if(ENABLE_LIBXC)
-  add_subdirectory(pdft)
-endif() # ENABLE_LIBXC
-
-if(ENABLE_LIBXC AND BUILD_LIBXC)
-  ExternalProject_Add(libxc
-    #GIT_REPOSITORY https://gitlab.com/libxc/libxc.git
-    #GIT_TAG master
-    URL https://gitlab.com/libxc/libxc/-/archive/7.1.2/libxc-7.1.2.tar.gz
-    PREFIX ${PROJECT_BINARY_DIR}/deps
-    INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-    # The wheel needs libxc itself, not its upstream test targets/dependencies.
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=OFF
-            -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-            -DCMAKE_INSTALL_LIBDIR:PATH=lib
-            -DENABLE_FORTRAN=0 -DMAXORDER=3
-            -DBUILD_TESTING=OFF
-            -DCMAKE_C_CREATE_SHARED_LIBRARY=${C_LINK_TEMPLATE}
-            -DENABLE_XHOST:STRING=${BUILD_MARCH_NATIVE}
-            -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
-            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 # remove when libxc update version min in next release
-  )
-  add_dependencies(xc_itrf libxc)
-  add_dependencies(dft libxc)
-  add_dependencies(pdft libxc)
-endif() # ENABLE_LIBXC
-
-if(ENABLE_XCFUN AND BUILD_XCFUN)
-  ExternalProject_Add(libxcfun
-    GIT_REPOSITORY https://github.com/dftlibs/xcfun.git
-    GIT_TAG a89b783
-    # CI builds the wheel twice from one tree. Preserve the external-project
-    # stamps so the final packaging pass does not fetch and patch XCFun again.
-    UPDATE_DISCONNECTED TRUE
-    # This patch adds derivatives up to order 5; a rejection must not produce
-    # a silently incomplete wheel.
-    PATCH_COMMAND git apply --reject ${PROJECT_SOURCE_DIR}/libxcfun.patch
-    PREFIX ${PROJECT_BINARY_DIR}/deps
-    INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1
-            -DXCFUN_MAX_ORDER=${XCFUN_MAX_ORDER} -DENABLE_TESTALL=0
-            -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-            # xcfun uses M_PI before another bundled header defines it.
-            -DCMAKE_CXX_FLAGS=-DM_PI=3.14159265358979323846
-            -DCMAKE_CXX_CREATE_SHARED_LIBRARY=${CXX_LINK_TEMPLATE}
-            -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-  )
-  add_dependencies(xcfun_itrf libxcfun)
-  add_dependencies(dft libxcfun)
-endif() # ENABLE_XCFUN
-
-if(ENABLE_LIBXSMM AND BUILD_LIBXSMM)
-  if(NOT EXISTS "${PROJECT_SOURCE_DIR}/deps/include/libxsmm.h")
-    ExternalProject_Add(libxsmm
-      GIT_REPOSITORY https://github.com/hfp/libxsmm.git
-      GIT_TAG 1.17
-      PREFIX ${PROJECT_BINARY_DIR}/deps
-      INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-      CONFIGURE_COMMAND ""
-      BUILD_IN_SOURCE True
-      BUILD_COMMAND make -j4 PREFIX=<INSTALL_DIR> CXX=${CMAKE_CXX_COMPILER} CC=${CMAKE_C_COMPILER} STATIC=0 MALLOC=0 INTRINSICS=2 install
-      INSTALL_COMMAND ""
-    )
-    add_dependencies(dft libxsmm)
+  if(ENABLE_IPO)
+    set_property(TARGET ${target_lib} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
   endif()
-endif()
-endif() # DISABLE_DFT
 
-if(ENABLE_FFTW AND BUILD_FFTW)
-#  if(NOT EXISTS "${PROJECT_SOURCE_DIR}/deps/include/fftw3.h")
-    ExternalProject_Add(libfftw3
-      URL https://www.fftw.org/fftw-3.3.10.tar.gz
-      PREFIX ${PROJECT_BINARY_DIR}/deps
-      INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps
-      BUILD_IN_SOURCE True
-      CONFIGURE_COMMAND ./configure --enable-static=no --enable-shared=yes --enable-threads CXX=${CMAKE_CXX_COMPILER} CC=${CMAKE_C_COMPILER} prefix=<INSTALL_DIR>
-      BUILD_COMMAND make -j4 install
-    )
-    add_dependencies(fft libfftw3)
-    add_dependencies(pbc libfftw3)
-#  endif()
-endif()
+  set_target_properties(${target_lib} PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    C_STANDARD 99
+  )
 
-if(EXISTS "${PROJECT_SOURCE_DIR}/cmake.user.inc")
-  include("${PROJECT_SOURCE_DIR}/cmake.user.inc")
-endif()
+endforeach()
+
+
+
+
+
+
+#                               Installation
+# ----------------------------------------------------------------------------
+#
+
+install(FILES
+    config.h
+    agf2/ragf2.h
+    ao2mo/nr_ao2mo.h
+    ao2mo/nr_incore.h
+    ao2mo/r_ao2mo.h
+    config.h
+    dft/grid_basis.h
+    dft/grid_common.h
+    dft/multigrid.h
+    gto/ft_ao.h
+    gto/grid_ao_drv.h
+    gto/gto.h
+    gto/nr_ecp.h
+    mcscf/fci.h
+    mp/mp2.h
+    np_helper/np_helper.h
+    pbc/cell.h
+    pbc/fft.h
+    pbc/fill_ints.h
+    pbc/neighbor_list.h
+    pbc/optimizer.h
+    pbc/pbc.h
+    vhf/cvhf.h
+    vhf/fblas.h
+    vhf/nr_direct.h
+    vhf/optimizer.h
+    vhf/r_direct_dot.h
+    vhf/time_rev.h
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/pyscf
+  )
+
+# target_include_directories(corepyscf
+#       PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/pyscf>)
+
+# include(CMakePackageConfigHelpers)
+# configure_package_config_file(${PROJECT_SOURCE_DIR}/cmake/pyscfConfig.cmake.in
+#   ${CMAKE_CURRENT_BINARY_DIR}/pyscfConfig.cmake
+#   INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pyscf)
+
+# install(TARGETS corepyscf
+#         EXPORT pyscf-targets
+#         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+#         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+# )
+
+
+
+# write_basic_package_version_file(
+#     "${CMAKE_CURRENT_BINARY_DIR}/pyscfConfigVersion.cmake"
+#     COMPATIBILITY AnyNewerVersion)
+
+# install(FILES "${CMAKE_CURRENT_BINARY_DIR}/pyscfConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/pyscfConfigVersion.cmake"
+#     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pyscf)
+
+# export(EXPORT pyscf-targets
+#     FILE ${CMAKE_CURRENT_BINARY_DIR}/pyscfTargets.cmake
+#         NAMESPACE pyscf::
+# )
+
+# install(EXPORT pyscf-targets
+#         FILE pyscfTargets.cmake
+#         NAMESPACE pyscf::
+#         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pyscf
+# )

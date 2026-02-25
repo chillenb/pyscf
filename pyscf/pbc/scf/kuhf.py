@@ -308,7 +308,7 @@ def canonicalize(mf, mo_coeff_kpts, mo_occ_kpts, fock=None):
     mo_coeff = np.stack([ca, cb])
     return mo_energy, mo_coeff
 
-def init_guess_by_chkfile(cell, chkfile_name, project=None, kpts=None):
+def init_guess_by_chkfile(cell, chkfile_name, project=None, kpts=None, guess_for_krhf=False):
     '''Read the KHF results from checkpoint file, then project it to the
     basis defined by ``cell``
 
@@ -362,8 +362,11 @@ def init_guess_by_chkfile(cell, chkfile_name, project=None, kpts=None):
         return np.asarray(dm)
 
     if getattr(mo[0], 'ndim', None) == 2:  # KRHF
-        mo_occa = [(occ>1e-8).astype(np.double) for occ in mo_occ]
-        mo_occb = [occ-mo_occa[k] for k,occ in enumerate(mo_occ)]
+        if guess_for_krhf:
+            mo_occb = mo_occa = mo_occ / 2.0
+        else:
+            mo_occa = [(occ>1e-8).astype(np.double) for occ in mo_occ]
+            mo_occb = [occ-mo_occa[k] for k,occ in enumerate(mo_occ)]
         dm = makedm((mo, mo), (mo_occa, mo_occb))
     else:  # KUHF
         dm = makedm(mo, mo_occ)
