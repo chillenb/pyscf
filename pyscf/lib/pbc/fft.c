@@ -16,22 +16,35 @@
  * Author: Xing Zhang <zhangxing.nju@gmail.com>
  */
 
-#include <stdio.h>
 #include <complex.h>
-#include <fft.h>
+#include <omp.h>
+#include <fftw3.h>
+#include <stdio.h>
+
+
+
+#include "fft.h"
 #include "config.h"
 
-#define BLKSIZE 128
-#define MAX(x, y) (((x) > (y)) ? (x) : (y))
 
-fftw_plan fft_create_r2c_plan(double* in, complex double* out, int rank, int* mesh)
+// https://www.fftw.org/fftw3_doc/Usage-of-Multi_002dthreaded-FFTW.html
+// Allows FFTW to use the same OpenMP runtime as PySCF, no matter
+// how it was built.
+static void openmp_callback_for_fftw(void *(*work)(char *), char *jobdata, size_t elsize, int njobs, void *data)
+{
+#pragma omp parallel for schedule(static)
+    for (int i = 0; i < njobs; ++i)
+        work(jobdata + elsize * i);
+}
+
+fftw_plan fft_create_r2c_plan(double* in, double complex *out, int rank, int* mesh)
 {
     fftw_plan p;
     p = fftw_plan_dft_r2c(rank, mesh, in, out, FFTW_ESTIMATE);
     return p;
 }
 
-fftw_plan fft_create_c2r_plan(complex double* in, double* out, int rank, int* mesh)
+fftw_plan fft_create_c2r_plan(double complex* in, double* out, int rank, int* mesh)
 {
     fftw_plan p;
     p = fftw_plan_dft_c2r(rank, mesh, in, out, FFTW_ESTIMATE);
@@ -50,46 +63,26 @@ void fft_destroy_plan(fftw_plan p)
 
 void _complex_fft(complex double* in, complex double* out, int* mesh, int rank, int sign)
 {
-    int i;
-    int nx = mesh[0];
-    int nyz = 1;
-    for (i = 1; i < rank; i++) {
-        nyz *= mesh[i];
-    }
-    int nmax = nyz / BLKSIZE * BLKSIZE;
-    fftw_plan p_2d = fftw_plan_dft(rank-1, mesh+1, in, out, sign, FFTW_ESTIMATE);
-    int nn[BLKSIZE] = {nx};
-    fftw_plan p_3d_x = fftw_plan_many_dft(1, nn, BLKSIZE,
-                                          out, NULL, nyz, 1,
-                                          out, NULL, nyz, 1,
-                                          sign, FFTW_ESTIMATE);
+    fftw_init_threads();
+    fftw_threads_set_callback(&openmp_callback_for_fftw, (void *) 0);
+    fftw_plan_with_nthreads(omp_get_max_threads());
+    fftw_plan p;
 
-    #pragma omp parallel private(i)
-    {
-        int off;
-        #pragma omp for schedule(dynamic)
-        for (i = 0; i < nx; i++) {
-            off = i * nyz;
-            fftw_execute_dft(p_2d, in+off, out+off);
-        }
-
-        #pragma omp for schedule(dynamic)
-        for (i = 0; i < nmax; i+=BLKSIZE) {
-            fftw_execute_dft(p_3d_x, out+i, out+i);
-        }
+    switch(rank) {
+        case 1:
+            p = fftw_plan_dft_1d(mesh[0], in, out, sign, FFTW_ESTIMATE);
+            break;
+        case 2:
+            p = fftw_plan_dft_2d(mesh[0], mesh[1], in, out, sign, FFTW_ESTIMATE);
+            break;
+        case 3:
+            p = fftw_plan_dft_3d(mesh[0], mesh[1], mesh[2], in, out, sign, FFTW_ESTIMATE);
+            break;
+        default:
+            p = fftw_plan_dft(rank, mesh, in, out, sign, FFTW_ESTIMATE);
     }
-    fftw_destroy_plan(p_2d);
-    fftw_destroy_plan(p_3d_x);
-    
-    int nres = nyz - nmax;
-    if (nres > 0) {
-        fftw_plan p_3d_x = fftw_plan_many_dft(1, nn, nres,
-                                          out+nmax, NULL, nyz, 1,
-                                          out+nmax, NULL, nyz, 1,
-                                          sign, FFTW_ESTIMATE);
-        fftw_execute(p_3d_x);
-        fftw_destroy_plan(p_3d_x);
-    }
+    fftw_execute(p);
+    fftw_destroy_plan(p);
 }
 
 void fft(complex double* in, complex double* out, int* mesh, int rank)
@@ -111,14 +104,14 @@ void ifft(complex double* in, complex double* out, int* mesh, int rank)
     }
 }
 
-void rfft(double* in, complex double* out, int* mesh, int rank)
+void rfft(double* in, double complex* out, int* mesh, int rank)
 {
     fftw_plan p = fftw_plan_dft_r2c(rank, mesh, in, out, FFTW_ESTIMATE); 
     fftw_execute(p);
     fftw_destroy_plan(p);
 }
 
-void irfft(complex double* in, double* out, int* mesh, int rank)
+void irfft(double complex* in, double* out, int* mesh, int rank)
 {
     fftw_plan p = fftw_plan_dft_c2r(rank, mesh, in, out, FFTW_ESTIMATE);
     fftw_execute(p);
