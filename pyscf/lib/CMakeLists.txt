@@ -20,6 +20,7 @@ include(CheckSymbolExists)
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
 endif()
+
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 if (CMAKE_COMPILER_IS_GNUCC) # Does it skip the link flag on old OsX?
   # TODO: If updating to minimum requirement cmake>=3.7, use
@@ -30,43 +31,17 @@ if (CMAKE_COMPILER_IS_GNUCC) # Does it skip the link flag on old OsX?
     set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--no-as-needed")
   endif()
 endif()
-set(CMAKE_C_FLAGS "-Wall ${CMAKE_C_FLAGS}")
+
 set(CMAKE_C_STANDARD 99)
 
 option(BUILD_MARCH_NATIVE "gcc flag -march=native" off)
-if (BUILD_MARCH_NATIVE)
-  include(CheckCCompilerFlag)
-  CHECK_C_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
-  if(COMPILER_SUPPORTS_MARCH_NATIVE)
-    if ("${CMAKE_C_COMPILER_ID}" STREQUAL "Intel")
-      message("Add CFLAGS -march=native -unroll-aggressive")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -unroll-aggressive -ipo")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-math-errno")
-    else()
-      message("Add CFLAGS -march=native -ftree-vectorize")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=native -funroll-loops -ftree-vectorize")
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-math-errno")
-    endif()
-  endif()
-else()
-  if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-    include(CheckCCompilerFlag)
-    CHECK_C_COMPILER_FLAG("-msse3" COMPILER_SUPPORTS_SSE3)
-    if(COMPILER_SUPPORTS_SSE3)
-      # Avoids error "‘SIMDD’ undeclared here (not in a function)" in the qcint two-electron integral interface
-      set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -msse3")
-    endif()
-  endif()
-endif()
 
+# this will produce a list of flags in the variable pyscf_cflags.
+include(cmake/optflags.cmake)
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-# Architecture specified cmake flags.  See also the templates in
-# pyscf/lib/cmake_arch_config
-if(EXISTS "${PROJECT_SOURCE_DIR}/cmake.arch.inc")
-  include("${PROJECT_SOURCE_DIR}/cmake.arch.inc")
-endif()
+
 
 if (NOT BLAS_LIBRARIES)
 #enable_language(Fortran)
@@ -102,6 +77,12 @@ if(ENABLE_OPENMP)
     set(HAVE_OPENMP 1)
     set(OPENMP_C_PROPERTIES OpenMP::OpenMP_C)
   endif()
+endif()
+
+# Architecture specified cmake flags.  See also the templates in
+# pyscf/lib/cmake_arch_config
+if(EXISTS "${PROJECT_SOURCE_DIR}/cmake.arch.inc")
+  include("${PROJECT_SOURCE_DIR}/cmake.arch.inc")
 endif()
 
 if(NOT XCFUN_MAX_ORDER)

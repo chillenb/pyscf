@@ -20,6 +20,7 @@ add_dependencies(pbc cgto cvhf np_helper)
 set_target_properties(pbc PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
+target_compile_options(pbc PRIVATE ${pyscf_cflags})
 target_link_libraries(pbc cgto cint cvhf np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 
 if(ENABLE_FFTW)
@@ -28,5 +29,6 @@ set_target_properties(fft PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
   COMPILE_FLAGS ${OpenMP_C_FLAGS}
   LINK_FLAGS ${OpenMP_C_FLAGS})
+target_compile_options(fft PRIVATE ${pyscf_cflags})
 target_link_libraries(fft fftw3_threads fftw3 ${BLAS_LIBRARIES})
 endif()

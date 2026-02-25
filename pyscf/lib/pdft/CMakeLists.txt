@@ -6,3 +6,4 @@ set_target_properties (pdft PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "pdft")
+target_compile_options (pdft PRIVATE ${pyscf_cflags})

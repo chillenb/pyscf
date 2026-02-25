@@ -18,4 +18,5 @@ add_library(np_helper SHARED
 set_target_properties(np_helper PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
+target_compile_options(np_helper PRIVATE ${pyscf_cflags})
 target_link_libraries(np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})

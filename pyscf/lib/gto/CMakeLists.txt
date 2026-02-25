@@ -22,5 +22,6 @@ add_dependencies(cgto np_helper)
 set_target_properties(cgto PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
+target_compile_options(cgto PRIVATE ${pyscf_cflags})
 target_link_libraries(cgto cint np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 

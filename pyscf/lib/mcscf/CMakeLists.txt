@@ -23,6 +23,7 @@ add_dependencies(fci np_helper)
 set_target_properties(fci PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
+target_compile_options(fci PRIVATE ${pyscf_cflags})
 target_link_libraries(fci np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 
 add_library(mcscf SHARED
@@ -32,4 +33,5 @@ add_dependencies(mcscf fci np_helper)
 set_target_properties(mcscf PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
+target_compile_options(mcscf PRIVATE ${pyscf_cflags})
 target_link_libraries(mcscf fci cvhf ao2mo np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})

@@ -19,4 +19,5 @@ add_dependencies(mp np_helper)
 set_target_properties(mp PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
+target_compile_options(mp PRIVATE ${pyscf_cflags})
 target_link_libraries(mp np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
