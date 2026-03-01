@@ -18,4 +18,4 @@ target_sources(corepyscf PRIVATE
   rccsdtq.c
 )
 
-target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(corepyscf PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)

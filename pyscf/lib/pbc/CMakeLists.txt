@@ -34,8 +34,8 @@ target_sources(corepyscf PRIVATE
 
 if(ENABLE_FFTW)
   target_sources(corepyscf PRIVATE fft.c)
-elseif(USE_MKL_FFT)
+elseif(ENABLE_MKL)
   target_sources(corepyscf PRIVATE mklfft.c)
 endif()
 
-target_include_directories(corepyscf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(corepyscf PRIVATE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>)
