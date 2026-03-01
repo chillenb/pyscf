@@ -93,18 +93,39 @@ c_null_ptr = ctypes.POINTER(ctypes.c_void_p)
 
 @functools.lru_cache(128)
 def load_library(libname):
-    try:
-        _loaderpath = os.path.dirname(__file__)
-        return numpy.ctypeslib.load_library(libname, _loaderpath)
-    except OSError:
-        from pyscf import __path__ as ext_modules
-        for path in ext_modules:
-            libpath = os.path.join(path, 'lib')
-            if os.path.isdir(libpath):
-                for files in os.listdir(libpath):
-                    if files.startswith(libname):
-                        return numpy.ctypeslib.load_library(libname, libpath)
-        raise
+    # build a list of directories where the library might be.
+    search_paths = []
+    # Allow users to specify additional library paths through environment variable
+    # PYSCF_LIBRARY_PATH. Makes it easier to develop compiled extensions.
+    # This overrides the default search paths.
+    if "PYSCF_LIBRARY_PATH" in os.environ:
+        for path in os.environ["PYSCF_LIBRARY_PATH"].split(os.pathsep):
+            if os.path.isdir(path):
+                search_paths.append(path)
+
+    # After PYSCF_LIBRARY_PATH, search the pyscf/lib folder.
+    search_paths.append(os.path.dirname(__file__))
+
+    # After pyscf/lib, search the PySCF extension modules.
+    from pyscf import __path__ as ext_modules
+    for path in ext_modules:
+        libpath = os.path.join(path, 'lib')
+        if os.path.isdir(libpath):
+            search_paths.append(libpath)
+
+    # Useful for hacking, working on clusters, etc.
+    if "LD_LIBRARY_PATH" in os.environ:
+        for path in os.environ["LD_LIBRARY_PATH"].split(os.pathsep):
+            if os.path.isdir(path):
+                search_paths.append(path)
+
+    # Actually search.
+    for try_path in search_paths:
+        try:
+            return numpy.ctypeslib.load_library(libname, try_path)
+        except OSError:
+            continue
+    raise OSError(f"Library {libname} not found in search paths: {search_paths}")
 
 #Fixme, the standard resource module gives wrong number when objects are released
 # http://fa.bianp.net/blog/2013/different-ways-to-get-memory-consumption-or-lessons-learned-from-memory_profiler/#fn:1
