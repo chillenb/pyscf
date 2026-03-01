@@ -105,57 +105,39 @@ _dll_deps = {
 
 @functools.lru_cache(128)
 def load_library(libname):
-    lib = None
-    try:
-        _loaderpath = os.path.dirname(__file__)
-        lib = numpy.ctypeslib.load_library(libname, _loaderpath)
-    except OSError:
-        pass
+    # build a list of directories where the library might be.
+    search_paths = []
+    # Allow users to specify additional library paths through environment variable
+    # PYSCF_LIBRARY_PATH. Makes it easier to develop compiled extensions.
+    # This overrides the default search paths.
+    if "PYSCF_LIBRARY_PATH" in os.environ:
+        for path in os.environ["PYSCF_LIBRARY_PATH"].split(os.pathsep):
+            if os.path.isdir(path):
+                search_paths.append(path)
 
-    if lib is None and sys.platform == 'win32':
-        for env_path in [os.path.join(sys.prefix, 'Library', 'bin'),
-                         os.path.join(sys.prefix, 'Library', 'lib')]:
-            try:
-                lib = numpy.ctypeslib.load_library(libname, env_path)
-                break
-            except OSError:
-                pass
+    # After PYSCF_LIBRARY_PATH, search the pyscf/lib folder.
+    search_paths.append(os.path.dirname(__file__))
 
-    if lib is None:
-        from pyscf import __path__ as ext_modules
-        for path in ext_modules:
-            libpath = os.path.join(path, 'lib')
-            if os.path.isdir(libpath):
-                for files in os.listdir(libpath):
-                    if files.startswith(libname):
-                        lib = numpy.ctypeslib.load_library(libname, libpath)
-                        break
-                if lib is not None:
-                    break
-        if lib is None:
-            raise OSError(f'Library {libname} not found')
+    # After pyscf/lib, search the PySCF extension modules.
+    from pyscf import __path__ as ext_modules
+    for path in ext_modules:
+        libpath = os.path.join(path, 'lib')
+        if os.path.isdir(libpath):
+            search_paths.append(libpath)
 
-    if sys.platform == 'win32' and libname in _dll_deps:
-        deps = [load_library(d) for d in _dll_deps[libname]]
-        lib = make_dll_wrapper(lib, *deps)
-    return lib
+    # Useful for hacking, working on clusters, etc.
+    if "LD_LIBRARY_PATH" in os.environ:
+        for path in os.environ["LD_LIBRARY_PATH"].split(os.pathsep):
+            if os.path.isdir(path):
+                search_paths.append(path)
 
-
-def make_dll_wrapper(lib, *fallbacks):
-    if sys.platform != 'win32':
-        return lib
-    class _DllWrapper:
-        def __init__(self, primary, *fallbacks):
-            object.__setattr__(self, '_primary', primary)
-            object.__setattr__(self, '_fallbacks', fallbacks)
-        def __getattr__(self, name):
-            for dll in (self._primary,) + self._fallbacks:
-                try:
-                    return getattr(dll, name)
-                except AttributeError:
-                    pass
-            raise AttributeError(f"function '{name}' not found")
-    return _DllWrapper(lib, *fallbacks)
+    # Actually search.
+    for try_path in search_paths:
+        try:
+            return numpy.ctypeslib.load_library(libname, try_path)
+        except OSError:
+            continue
+    raise OSError(f"Library {libname} not found in search paths: {search_paths}")
 
 #Fixme, the standard resource module gives wrong number when objects are released
 # http://fa.bianp.net/blog/2013/different-ways-to-get-memory-consumption-or-lessons-learned-from-memory_profiler/#fn:1
