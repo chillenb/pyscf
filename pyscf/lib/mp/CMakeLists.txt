@@ -14,9 +14,8 @@
 
 add_library(mp SHARED
   mp2.c)
-add_dependencies(mp np_helper)
-
-set_target_properties(mp PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 target_link_libraries(mp np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+
+list(APPEND PYSCF_TARGETS mp)
+set(PYSCF_TARGETS ${PYSCF_TARGETS} PARENT_SCOPE)
