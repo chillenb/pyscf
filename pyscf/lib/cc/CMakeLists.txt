@@ -14,10 +14,8 @@
 
 add_library(cc SHARED
   ccsd_pack.c ccsd_grad.c ccsd_t.c ccsd_t_lambda.c uccsd_t.c)
-add_dependencies(cc np_helper ao2mo)
-
-set_target_properties(cc PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 target_link_libraries(cc ao2mo cvhf np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 
+list(APPEND PYSCF_TARGETS cc)
+set(PYSCF_TARGETS ${PYSCF_TARGETS} PARENT_SCOPE)
