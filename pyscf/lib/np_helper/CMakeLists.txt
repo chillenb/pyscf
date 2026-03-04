@@ -15,7 +15,7 @@
 add_library(np_helper SHARED 
   transpose.c pack_tril.c npdot.c condense.c omp_reduce.c np_helper.c imatcopy.c np_broadcast.c)
 
-set_target_properties(np_helper PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
 target_link_libraries(np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+
+list(APPEND PYSCF_TARGETS np_helper)
+set(PYSCF_TARGETS ${PYSCF_TARGETS} PARENT_SCOPE)

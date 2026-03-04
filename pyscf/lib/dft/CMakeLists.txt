@@ -17,10 +17,6 @@ add_library(dft SHARED
   numint_uniform_grid.c xc_deriv.c nr_numint_sparse.c
   multigrid.c grid_common.c grid_collocate.c grid_integrate.c
 )
-add_dependencies(dft cgto cvhf np_helper pbc)
-
-set_target_properties(dft PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
 
 if(ENABLE_LIBXSMM)
   add_definitions(-DHAVE_LIBXSMM)
@@ -31,14 +27,15 @@ endif()
 
 if(ENABLE_LIBXC)
 add_library(xc_itrf SHARED libxc_itrf.c)
-set_target_properties(xc_itrf PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-target_link_libraries(xc_itrf xc ${OPENMP_C_PROPERTIES})
+target_link_libraries(xc_itrf Libxc::xc ${OPENMP_C_PROPERTIES})
+list(APPEND PYSCF_TARGETS xc_itrf)
 endif()
 
 if(ENABLE_XCFUN)
 add_library(xcfun_itrf SHARED xcfun_itrf.c)
-set_target_properties(xcfun_itrf PROPERTIES
-  LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-target_link_libraries(xcfun_itrf xcfun ${OPENMP_C_PROPERTIES})
+target_link_libraries(xcfun_itrf XCFun::xcfun ${OPENMP_C_PROPERTIES})
+list(APPEND PYSCF_TARGETS xcfun_itrf)
 endif()
+
+list(APPEND PYSCF_TARGETS dft)
+set(PYSCF_TARGETS ${PYSCF_TARGETS} PARENT_SCOPE)
