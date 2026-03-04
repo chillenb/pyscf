@@ -57,8 +57,11 @@ option(BUILD_LIBCINT "Building libcint for gaussian integral evaluation" ON)
 option(USE_QCINT "Using the qcint library (optimized for x86-64) for gaussian integral evaluation" OFF)
 option(ENABLE_LIBXC "Using libxc for XC functional library" ON)
 option(ENABLE_XCFUN "Using xcfun for XC functional library" ON)
+option(BUILD_LIBXC "Build libxc if we can't find it" ON)
+option(BUILD_XCFUN "Build xcfun if we can't find it" ON)
 
 option(ENABLE_LIBXSMM "Using libxsmm" OFF)
+option(FIXRPATH "Modify RPATH for building wheels." OFF)
 
 message(STATUS "Summary of provided options:")
 cmake_print_variables(BUILD_MARCH_NATIVE
@@ -74,22 +77,20 @@ include(cmake/optflags.cmake)
 include(cmake/openmp.cmake)
 include(cmake/mkl.cmake)
 
-add_library(corepyscf SHARED)
-set_property(TARGET corepyscf PROPERTY C_STANDARD 99)
-set_property(TARGET corepyscf PROPERTY LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
-
-# Enable warnings for supported compilers.
-if(${CMAKE_C_COMPILER_ID} IN_LIST "GNU;Clang;IntelLLVM")
-  target_compile_options(corepyscf PRIVATE -Wall)
+if(FIXRPATH)
+  include(cmake/fixrpath.cmake)
 endif()
-
 
 if(ENABLE_IPO)
   check_ipo_supported()
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
-  set_property(TARGET corepyscf PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
   message(STATUS "Enabled interprocedural optimization (IPO)/link time optimization (LTO)")
 endif()
+
+# Enable warnings for supported compilers.
+if(${CMAKE_C_COMPILER_ID} IN_LIST "GNU;Clang;IntelLLVM")
+  list(APPEND PYSCF_OPTFLAGS "-Wall")
+endif()
+
 
 # Architecture specified cmake flags.  See also the templates in
 # pyscf/lib/cmake_arch_config
@@ -129,24 +130,20 @@ if(NOT XCFUN_MAX_ORDER)
 endif()
 
 if(ENABLE_LIBXC)
-  message(STATUS "Looking for LibXC")
-  find_package(Libxc REQUIRED)
-  cmake_print_properties(TARGETS Libxc::xc PROPERTIES LOCATION INTERFACE_LINK_LIBRARIES)
-  target_link_libraries(corepyscf PRIVATE Libxc::xc)
+  include(cmake/libxc.cmake)
 endif()
 
 if(ENABLE_XCFUN)
-  message(STATUS "Looking for XCFun")
-  find_package(XCFun REQUIRED)
-  cmake_print_properties(TARGETS XCFun::xcfun PROPERTIES LOCATION INTERFACE_LINK_LIBRARIES)
-  target_link_libraries(corepyscf PRIVATE XCFun::xcfun)
+  include(cmake/xcfun.cmake)
 endif()
 
 configure_file(
   "${PROJECT_SOURCE_DIR}/config.h.in"
   "${PROJECT_SOURCE_DIR}/config.h")
 
-target_include_directories(corepyscf PRIVATE ${PROJECT_SOURCE_DIR})
+# each subdirectory appends its library targets to
+# PYSCF_TARGETS.
+set(PYSCF_TARGETS)
 
 add_subdirectory(np_helper)
 add_subdirectory(gto)
@@ -173,13 +170,6 @@ if(ENABLE_MKL AND ENABLE_FFTW)
   message(FATAL_ERROR "Cannot use both MKL and FFTW for FFT. Please choose only one.")
 endif()
 
-message(STATUS "pyscf sources: " ${PYSCF_SOURCES})
-target_sources(corepyscf PRIVATE ${PYSCF_SOURCES})
-target_link_libraries(corepyscf PRIVATE ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
-if(ENABLE_LIBXC)
-  target_link_libraries(corepyscf PRIVATE xc)
-endif()
-
 if(BUILD_LIBCINT)
   set(LIBCINT_GIT https://github.com/sunqm/libcint.git) # libcint is a portable, cross-platform implementation
   set(LIBCINT_VERSION v6.1.3)
@@ -200,7 +190,6 @@ if(BUILD_LIBCINT)
   message(STATUS "Fetching libcint from ${LIBCINT_GIT} at tag ${LIBCINT_VERSION}")
   FetchContent_MakeAvailable(libcint)
   set_target_properties(cint PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-  target_link_libraries(corepyscf PRIVATE cint)
   install(TARGETS cint
           EXPORT pyscf-targets
           LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -209,6 +198,25 @@ if(BUILD_LIBCINT)
           INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   )
 endif() # BUILD_LIBCINT
+
+# Loop over all library targets.
+foreach(target_lib ${PYSCF_TARGETS})
+
+  target_compile_options(${target_lib} PRIVATE ${PYSCF_OPTFLAGS})
+  target_include_directories(${target_lib} PRIVATE ${PROJECT_SOURCE_DIR})
+
+  if(ENABLE_IPO)
+    set_property(TARGET ${target_lib} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+  endif()
+
+  set_target_properties(${target_lib} PROPERTIES
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    C_STANDARD 99
+  )
+
+endforeach()
+
+
 
 
 
@@ -249,38 +257,38 @@ install(FILES
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/pyscf
   )
 
-target_include_directories(corepyscf
-      PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/pyscf>)
+# target_include_directories(corepyscf
+#       PUBLIC $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/pyscf>)
 
-include(CMakePackageConfigHelpers)
-configure_package_config_file(${PROJECT_SOURCE_DIR}/cmake/pyscfConfig.cmake.in
-  ${CMAKE_CURRENT_BINARY_DIR}/pyscfConfig.cmake
-  INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pyscf)
+# include(CMakePackageConfigHelpers)
+# configure_package_config_file(${PROJECT_SOURCE_DIR}/cmake/pyscfConfig.cmake.in
+#   ${CMAKE_CURRENT_BINARY_DIR}/pyscfConfig.cmake
+#   INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pyscf)
 
-install(TARGETS corepyscf
-        EXPORT pyscf-targets
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+# install(TARGETS corepyscf
+#         EXPORT pyscf-targets
+#         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+#         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+# )
 
 
 
-write_basic_package_version_file(
-    "${CMAKE_CURRENT_BINARY_DIR}/pyscfConfigVersion.cmake"
-    COMPATIBILITY AnyNewerVersion)
+# write_basic_package_version_file(
+#     "${CMAKE_CURRENT_BINARY_DIR}/pyscfConfigVersion.cmake"
+#     COMPATIBILITY AnyNewerVersion)
 
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/pyscfConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/pyscfConfigVersion.cmake"
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pyscf)
+# install(FILES "${CMAKE_CURRENT_BINARY_DIR}/pyscfConfig.cmake" "${CMAKE_CURRENT_BINARY_DIR}/pyscfConfigVersion.cmake"
+#     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pyscf)
 
-export(EXPORT pyscf-targets
-    FILE ${CMAKE_CURRENT_BINARY_DIR}/pyscfTargets.cmake
-        NAMESPACE pyscf::
-)
+# export(EXPORT pyscf-targets
+#     FILE ${CMAKE_CURRENT_BINARY_DIR}/pyscfTargets.cmake
+#         NAMESPACE pyscf::
+# )
 
-install(EXPORT pyscf-targets
-        FILE pyscfTargets.cmake
-        NAMESPACE pyscf::
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pyscf
-)
+# install(EXPORT pyscf-targets
+#         FILE pyscfTargets.cmake
+#         NAMESPACE pyscf::
+#         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/pyscf
+# )
