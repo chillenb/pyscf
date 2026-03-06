@@ -21,9 +21,13 @@ target_link_libraries(pbc cgto cint cvhf np_helper ${BLAS_LIBRARIES} ${OPENMP_C_
 list(APPEND PYSCF_TARGETS pbc)
 
 if(ENABLE_FFTW)
-add_library(fft SHARED fft.c)
-target_link_libraries(fft fftw3_threads fftw3 ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
-list(APPEND PYSCF_TARGETS fft)
+  add_library(fft SHARED fft.c)
+  list(APPEND PYSCF_TARGETS fft)
+  target_link_libraries(fft fftw3_threads fftw3 ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+elseif(ENABLE_MKL)
+  add_library(fft SHARED mklfft.c)
+  list(APPEND PYSCF_TARGETS fft)
+  target_link_libraries(fft ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 endif()
 
 set(PYSCF_TARGETS ${PYSCF_TARGETS} PARENT_SCOPE)
