@@ -51,89 +51,10 @@ void NPdgemm(const char trans_a, const char trans_b,
         b += offsetb;
         c += offsetc;
 
-        if ((k/m) > 3 && (k/n) > 3) { // parallelize k
+        dgemm_(&trans_a, &trans_b, &m, &n, &k,
+                &alpha, a, &lda, b, &ldb,
+                &beta, c, &ldc);
 
-                if (beta == 0) {
-                        for (i = 0; i < n; i++) {
-                                for (j = 0; j < m; j++) {
-                                        c[i*Ldc+j] = 0;
-                                }
-                        }
-                } else {
-                        for (i = 0; i < n; i++) {
-                                for (j = 0; j < m; j++) {
-                                        c[i*Ldc+j] *= beta;
-                                }
-                        }
-                }
-
-#pragma omp parallel private(i, j)
-{
-                double D0 = 0;
-                double *cpriv = malloc(sizeof(double) * (m*n+2));
-                size_t k0, k1, ij;
-                NPomp_split(&k0, &k1, k);
-                int dk = k1 - k0;
-                if (dk > 0) {
-                        size_t astride = k0;
-                        size_t bstride = k0;
-                        if (trans_a == 'N') {
-                                astride *= lda;
-                        }
-                        if (trans_b != 'N') {
-                                bstride *= ldb;
-                        }
-                        dgemm_(&trans_a, &trans_b, &m, &n, &dk,
-                               &alpha, a+astride, &lda, b+bstride, &ldb,
-                               &D0, cpriv, &m);
-                }
-#pragma omp critical
-                if (dk > 0) {
-                        for (ij = 0, i = 0; i < n; i++) {
-                        for (j = 0; j < m; j++, ij++) {
-                                c[i*Ldc+j] += cpriv[ij];
-                        } }
-                }
-
-                free(cpriv);
-}
-
-        } else if (m > n*2) { // parallelize m
-
-#pragma omp parallel
-{
-                size_t m0, m1;
-                NPomp_split(&m0, &m1, m);
-                int dm = m1 - m0;
-                if (dm > 0) {
-                        size_t astride = m0;
-                        if (trans_a != 'N') {
-                                astride *= lda;
-                        }
-                        dgemm_(&trans_a, &trans_b, &dm, &n, &k,
-                               &alpha, a+astride, &lda, b, &ldb,
-                               &beta, c+m0, &ldc);
-                }
-}
-
-        } else { // parallelize n
-
-#pragma omp parallel
-{
-                size_t n0, n1;
-                NPomp_split(&n0, &n1, n);
-                int dn = n1 - n0;
-                if (dn > 0) {
-                        size_t bstride = n0;
-                        if (trans_b == 'N') {
-                                bstride *= ldb;
-                        }
-                        dgemm_(&trans_a, &trans_b, &m, &dn, &k,
-                               &alpha, a, &lda, b+bstride, &ldb,
-                               &beta, c+Ldc*n0, &ldc);
-                }
-}
-        }
 }
 
 
@@ -159,86 +80,8 @@ void NPzgemm(const char trans_a, const char trans_b,
         b += offsetb;
         c += offsetc;
 
-        if ((k/m) > 3 && (k/n) > 3) { // parallelize k
+        zgemm_(&trans_a, &trans_b, &m, &n, &k,
+                alpha, a, &lda, b, &ldb,
+                beta, c, &ldc);
 
-                if (creal(*beta) == 0 && cimag(*beta) == 0) {
-                        for (i = 0; i < n; i++) {
-                                for (j = 0; j < m; j++) {
-                                        c[i*Ldc+j] = 0;
-                                }
-                        }
-                } else {
-                        for (i = 0; i < n; i++) {
-                                for (j = 0; j < m; j++) {
-                                        c[i*Ldc+j] *= beta[0];
-                                }
-                        }
-                }
-
-#pragma omp parallel private(i, j)
-{
-                double complex Z0 = 0;
-                double complex *cpriv = malloc(sizeof(double complex) * (m*n+2));
-                size_t k0, k1, ij;
-                NPomp_split(&k0, &k1, k);
-                int dk = k1 - k0;
-                if (dk > 0) {
-                        size_t astride = k0;
-                        size_t bstride = k0;
-                        if (trans_a == 'N') {
-                                astride *= lda;
-                        }
-                        if (trans_b != 'N') {
-                                bstride *= ldb;
-                        }
-                        zgemm_(&trans_a, &trans_b, &m, &n, &dk,
-                               alpha, a+astride, &lda, b+bstride, &ldb,
-                               &Z0, cpriv, &m);
-                }
-#pragma omp critical
-                if (dk > 0) {
-                        for (ij = 0, i = 0; i < n; i++) {
-                        for (j = 0; j < m; j++, ij++) {
-                                c[i*Ldc+j] += cpriv[ij];
-                        } }
-                }
-                free(cpriv);
-}
-
-        } else if (m > n*2) { // parallelize m
-
-#pragma omp parallel
-{
-                size_t m0, m1;
-                NPomp_split(&m0, &m1, m);
-                int dm = m1 - m0;
-                if (dm > 0) {
-                        size_t astride = m0;
-                        if (trans_a != 'N') {
-                                astride *= lda;
-                        }
-                        zgemm_(&trans_a, &trans_b, &dm, &n, &k,
-                               alpha, a+astride, &lda, b, &ldb,
-                               beta, c+m0, &ldc);
-                }
-}
-
-        } else { // parallelize n
-
-#pragma omp parallel
-{
-                size_t n0, n1;
-                NPomp_split(&n0, &n1, n);
-                int dn = n1 - n0;
-                if (dn > 0) {
-                        size_t bstride = n0;
-                        if (trans_b == 'N') {
-                                bstride *= ldb;
-                        }
-                        zgemm_(&trans_a, &trans_b, &m, &dn, &k,
-                               alpha, a, &lda, b+bstride, &ldb,
-                               beta, c+Ldc*n0, &ldc);
-                }
-}
-        }
 }
