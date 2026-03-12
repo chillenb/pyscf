@@ -67,12 +67,12 @@ if sys.platform.startswith('linux'):
 
         so_file = os.path.abspath(os.path.join(__file__, '..', 'libnp_helper.so'))
         for p in _ldd(so_file):
-            if 'mkl' in p and 'thread' in p:
-                warnings.warn(f'PySCF C exteions are incompatible with {p}. '
-                              'MKL_NUM_THREADS is set to 1')
-                os.environ['MKL_NUM_THREADS'] = '1'
-                break
-            elif 'openblasp' in p or 'openblaso' in p:
+            #if 'mkl' in p and 'thread' in p:
+            #    warnings.warn(f'PySCF C exteions are incompatible with {p}. '
+            #                  'MKL_NUM_THREADS is set to 1')
+            #    os.environ['MKL_NUM_THREADS'] = '1'
+            #    break
+            if 'openblasp' in p or 'openblaso' in p:
                 warnings.warn(f'PySCF C exteions are incompatible with {p}. '
                               'OPENBLAS_NUM_THREADS is set to 1')
                 os.environ['OPENBLAS_NUM_THREADS'] = '1'
@@ -389,7 +389,8 @@ def map_with_prefetch(func, *iterables):
         import imp
         global_import_lock = imp.lock_held()
 
-    if not ASYNC_IO or global_import_lock:
+    #if not ASYNC_IO or global_import_lock:
+    if True:
         for task in zip(*iterables):
             yield func(*task)
 
