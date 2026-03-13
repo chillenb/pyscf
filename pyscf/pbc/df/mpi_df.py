@@ -289,7 +289,7 @@ class MPIGDF(GDF):
             # For long-range integrals _CCGDFBuilder is the only option
             dfbuilder = _CCNucBuilder(cell, kpts).build()
         else:
-            dfbuilder = _RSNucBuilder(cell, kpts).build()
+            dfbuilder = _MPIRSNucBuilder(cell, kpts).build()
         nuc = dfbuilder.get_nuc()
         if is_single_kpt:
             nuc = nuc[0]
