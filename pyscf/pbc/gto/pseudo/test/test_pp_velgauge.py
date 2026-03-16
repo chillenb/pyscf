@@ -3,7 +3,7 @@ import pathlib
 import numpy as np
 from pyscf.pbc import gto as pgto
 from pyscf.pbc.gto.pseudo.ppnl_velgauge import get_gth_pp_nl_velgauge, get_gth_pp_nl_velgauge_commutator
-
+from pyscf.pbc.gto.pseudo.ppnl_velgauge import VelGaugePPNLHelper
 
 # Reference values obtained from https://github.com/pyscf/pyscf-forge/pull/136
 # (K. Hanasaki),
