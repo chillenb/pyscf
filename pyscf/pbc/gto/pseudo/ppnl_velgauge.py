@@ -81,6 +81,9 @@ def get_gth_pp_nl_velgauge(cell, q, kpts=None, vgppnl_helper=None):
     if vgppnl_helper is None:
         vgppnl_helper = VelGaugePPNLHelper(cell, kpts=kpts_lst)
         vgppnl_helper.build()
+    else:
+        if not np.allclose(kpts_lst, vgppnl_helper.kpts):
+            raise ValueError("You must create a new helper object if you change k-pt set")
 
 
     #ppnl_half = _int_vnl_ft(cell, fakecell, hl_blocks, kpts_lst, q)
@@ -127,6 +130,11 @@ def get_gth_pp_nl_velgauge_commutator(cell, q, kpts=None, vgppnl_helper=None):
     if vgppnl_helper is None:
         vgppnl_helper = VelGaugePPNLHelper(cell, kpts=kpts_lst)
         vgppnl_helper.build()
+    else:
+        if not np.allclose(kpts_lst, vgppnl_helper.kpts):
+            raise ValueError("You must create a new helper object if you change k-pt set")
+
+
 
     ppnl_half = vgppnl_helper.int_vnl_ft(q)
     ppnl_rc_half = vgppnl_helper.int_vnl_ft(q, rc=True)
