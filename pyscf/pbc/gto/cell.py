@@ -961,8 +961,9 @@ def tot_electrons(cell, nkpts=1):
         nelectron = cell.atom_charges().sum() * nkpts - cell.charge
     else: # Custom cell.nelectron stands for num. electrons per cell
         nelectron = cell._nelectron * nkpts
-    # Round off to the nearest integer
-    nelectron = int(nelectron+0.5)
+    if not getattr(cell, 'permit_fractional_charge', False):
+        # Round off to the nearest integer
+        nelectron = int(nelectron+0.5)
     return nelectron
 
 def _mesh_inf_vaccum(cell):
