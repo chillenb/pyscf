@@ -1395,8 +1395,12 @@ class Cell(mole.MoleBase):
     @property
     def nelec(self):
         ne = self.nelectron
-        nalpha = (ne + self.spin) // 2
-        nbeta = nalpha - self.spin
+        if getattr(self, 'permit_fractional_charge', False):
+            nalpha = (ne + self.spin) / 2
+            nbeta = nalpha - self.spin
+        else:
+            nalpha = (ne + self.spin) // 2
+            nbeta = nalpha - self.spin
         # nelec method defined in Mole class raises error when the attributes .spin
         # and .nelectron are inconsistent.  In PBC, when the system has even number of
         # k-points, it is valid that .spin is odd while .nelectron is even.
