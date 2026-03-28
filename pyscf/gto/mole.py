@@ -2386,13 +2386,17 @@ class MoleBase(lib.StreamObject):
     @property
     def nelec(self):
         ne = self.nelectron
-        nalpha = (ne + self.spin) // 2
-        nbeta = nalpha - self.spin
+        if not getattr(self, 'permit_fractional_charge', False):
+            nalpha = (ne + self.spin) // 2
+            nbeta = nalpha - self.spin
+        else:
+            nalpha = (ne + self.spin) / 2
+            nbeta = nalpha - self.spin
         assert (nalpha >= 0 and nbeta >= 0)
         if nalpha + nbeta != ne:
             raise RuntimeError('Electron number %d and spin %d are not consistent\n'
-                               'Note mol.spin = 2S = Nalpha - Nbeta, not 2S+1' %
-                               (ne, self.spin))
+                            'Note mol.spin = 2S = Nalpha - Nbeta, not 2S+1' %
+                            (ne, self.spin))
         return nalpha, nbeta
     @nelec.setter
     def nelec(self, neleca_nelecb):
