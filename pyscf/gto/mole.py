@@ -876,6 +876,7 @@ def conc_mol(mol1, mol2):
     mol3.symmetry = False
     mol3.symmetry_subgroup = None
     mol3.cart = mol1.cart and mol2.cart
+    mol3.permit_fractional_charge = getattr(mol1, 'permit_fractional_charge', False) or getattr(mol2, 'permit_fractional_charge', False)
 
     mol3._atom = mol1._atom + mol2._atom
     mol3.atom = mol3._atom
@@ -1180,10 +1181,13 @@ def tot_electrons(mol):
     nelectron -= mol.charge
     nelectron_int = int(round(nelectron))
 
-    if abs(nelectron - nelectron_int) > 1e-4:
-        logger.warn(mol, 'Found fractional number of electrons %f. Round it to %d',
-                    nelectron, nelectron_int)
-    return nelectron_int
+    if not getattr(mol, 'permit_fractional_charge', False):
+        if abs(nelectron - nelectron_int) > 1e-4:
+            logger.warn(mol, 'Found fractional number of electrons %f. Round it to %d',
+                        nelectron, nelectron_int)
+        return nelectron_int
+    else:
+        return nelectron
 
 def copy(mol, deep=True):
     '''Deepcopy of the given :class:`Mole` object
@@ -1237,6 +1241,7 @@ def pack(mol):
             'pseudo'  : mol.pseudo,
             '_nelectron': mol._nelectron,
             'magmom'  : mol.magmom,
+            'permit_fractional_charge' : getattr(mol, 'permit_fractional_charge', False),
             'verbose' : mol.verbose}
     return mdic
 def unpack(moldic):
@@ -2326,6 +2331,7 @@ class MoleBase(lib.StreamObject):
         'cart', 'charge', 'spin', 'symmetry', 'symmetry_subgroup',
         'atom', 'basis', 'nucmod', 'ecp', 'nucprop', 'magmom', 'pseudo',
         'groupname', 'topgroup', 'symm_orb', 'irrep_id', 'irrep_name',
+        'permit_fractional_charge'
     }
 
     def __init__(self):
@@ -2342,6 +2348,7 @@ class MoleBase(lib.StreamObject):
         # Collinear spin of each atom. self.magmom = [0, ...]
         self.magmom = []
         self.pseudo = None
+        self.permit_fractional_charge = False
 ##################################################
 # don't modify the following private variables, they are not input options
         self._atm = numpy.zeros((0,6), dtype=numpy.int32)
@@ -2471,7 +2478,7 @@ class MoleBase(lib.StreamObject):
               verbose=None, output=None, max_memory=None,
               atom=None, basis=None, unit=None, nucmod=None, ecp=None, pseudo=None,
               charge=None, spin=0, symmetry=None, symmetry_subgroup=None,
-              cart=None, magmom=None):
+              cart=None, magmom=None, permit_fractional_charge=None):
         '''Setup molecule and initialize some control parameters.  Whenever you
         change the value of the attributes of :class:`Mole`, you need call
         this function to refresh the internal data of Mole.
@@ -2528,6 +2535,8 @@ class MoleBase(lib.StreamObject):
         if symmetry_subgroup is not None: self.symmetry_subgroup = symmetry_subgroup
         if cart is not None: self.cart = cart
         if magmom is not None: self.magmom = magmom
+        if permit_fractional_charge is not None:
+            self.permit_fractional_charge = permit_fractional_charge
 
         if parse_arg:
             _update_from_cmdargs_(self)
