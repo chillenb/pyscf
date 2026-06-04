@@ -958,7 +958,9 @@ def tot_electrons(cell, nkpts=1):
     '''Total number of electrons
     '''
     if cell._nelectron is None:
-        nelectron = cell.atom_charges().sum() * nkpts - cell.charge
+        nelectron = (cell.atom_charges().sum() - cell.charge) * nkpts
+        logger.warn(cell, 'Beginning with PySCF v2.XX, cell.charge equals the unit cell charge,')
+        logger.warn(cell, 'rather than the supercell charge.')
     else: # Custom cell.nelectron stands for num. electrons per cell
         nelectron = cell._nelectron * nkpts
     if not cell.nelec_frac:
