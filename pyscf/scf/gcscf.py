@@ -532,8 +532,7 @@ def _haux_eval(mf, mo_energy, mo_coeff_orth, x, hcore_ao, hcore):
             e_grand = float(e_free - float(mu_array) * nelectron)
         else:
             e_grand = float(e_free - mu_array @ numpy.sum(mo_occ, axis=1))
-        hsub = (mo_coeff_orth.swapaxes(-1, -2).conj()
-                @ fock @ mo_coeff_orth)
+        hsub = _matrix_rotation(fock, mo_coeff_orth)
         grad_filling = _hermitian_part(hsub) - _make_diagonal(mo_energy)
         if mf.mu0 is None:
             occ_prime = _fermi_occupation_derivative(mo_occ, mf.sigma, 1.0)
