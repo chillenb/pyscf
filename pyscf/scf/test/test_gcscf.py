@@ -64,6 +64,20 @@ def _run_smearing_reference(mf, sigma=.01, mu0=-.2):
 
 class KnownValues(unittest.TestCase):
 
+    def test_rhf_gcscf_fixed_nelectron_default(self):
+        mf = _run_gcscf(scf.RHF(mol), mu0=None)
+        mf_ref = _run_smearing_reference(scf.RHF(mol), mu0=None)
+
+        self.assertIsNone(mf.mu0)
+        self.assertTrue(mf.converged)
+        self.assertTrue(mf_ref.converged)
+        self.assertAlmostEqual(mf.e_tot, mf_ref.e_tot, 7)
+        self.assertAlmostEqual(mf.e_free, mf_ref.e_free, 7)
+        self.assertAlmostEqual(mf.nelectron, mol.nelectron, 7)
+        self.assertLess(abs(mf.entropy - mf_ref.entropy), 1e-6)
+        self.assertLess(abs(mf.mo_occ - mf_ref.mo_occ).max(), 1e-7)
+        self.assertLess(mf.auxh_residual_norm, mf.conv_tol_grad)
+
     def test_rhf_gcscf(self):
         mf = _run_gcscf(scf.RHF(mol))
         mf_ref = _run_smearing_reference(scf.RHF(mol))

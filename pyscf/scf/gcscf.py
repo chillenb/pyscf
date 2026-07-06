@@ -20,11 +20,10 @@ import scipy.linalg
 from pyscf import __config__
 from pyscf import lib
 from pyscf.lib import logger
-from pyscf.scf.smearing import _fermi_smearing_occ
+from pyscf.scf.smearing import _fermi_smearing_occ, _smearing_optimize
 
 
 GCSCF_SIGMA = getattr(__config__, 'scf_gcscf_sigma', None)
-GCSCF_MU0 = getattr(__config__, 'scf_gcscf_mu0', None)
 GCSCF_CONV_TOL_GRAD = getattr(__config__, 'scf_gcscf_conv_tol_grad', None)
 GCSCF_STEP = getattr(__config__, 'scf_gcscf_step', 1.0)
 GCSCF_MIN_STEP = getattr(__config__, 'scf_gcscf_min_step', 1e-4)
@@ -32,26 +31,26 @@ GCSCF_LINE_MAX_CYCLE = getattr(__config__, 'scf_gcscf_line_max_cycle', 6)
 
 
 def gcscf(mf, sigma=None, mu0=None):
-    '''Grand-canonical SCF via auxiliary-Hamiltonian minimization.
+    '''Finite-temperature SCF via auxiliary-Hamiltonian minimization.
 
     Args:
         mf : an RHF or RKS object
             Molecular restricted mean-field object to decorate.
         sigma : float
             Electronic temperature in Hartree.
-        mu0 : float
-            Fixed chemical potential in Hartree.
+        mu0 : float or None
+            Fixed chemical potential in Hartree.  If None, the electron number
+            is fixed to ``mol.nelectron``.
 
     Examples:
 
-    >>> mf = gcscf(scf.RHF(mol), sigma=.1, mu0=-.2)
+    >>> mf = gcscf(scf.RHF(mol), sigma=.1)
     >>> mf.kernel()
     '''
     if isinstance(mf, _GCSCF):
         if sigma is not None:
             mf.sigma = sigma
-        if mu0 is not None:
-            mf.mu0 = mu0
+        mf.mu0 = mu0
         return mf
 
     if mf.istype('_CIAH_SOSCF'):
@@ -83,7 +82,7 @@ def remove_gcscf(mf):
 
 
 class _GCSCF:
-    '''Grand-canonical SCF via auxiliary-Hamiltonian minimization.'''
+    '''Finite-temperature SCF via auxiliary-Hamiltonian minimization.'''
 
     __name_mixin__ = 'GC-SCF'
 
@@ -96,7 +95,7 @@ class _GCSCF:
     def __init__(self, mf, sigma, mu0):
         self.__dict__.update(mf.__dict__)
         self.sigma = GCSCF_SIGMA if sigma is None else sigma
-        self.mu0 = GCSCF_MU0 if mu0 is None else mu0
+        self.mu0 = mu0
         if GCSCF_CONV_TOL_GRAD is not None:
             self.conv_tol_grad = GCSCF_CONV_TOL_GRAD
         self.auxh_step = GCSCF_STEP
@@ -137,7 +136,11 @@ class _GCSCF:
         super().dump_flags(verbose)
         log.info('******** GC-SCF flags ********')
         log.info('sigma = %s', self.sigma)
-        log.info('mu0 = %s', self.mu0)
+        if self.mu0 is None:
+            log.info('electron number fixed to mol.nelectron = %s',
+                     self.mol.nelectron)
+        else:
+            log.info('mu0 = %s', self.mu0)
         log.info('conv_tol_grad = %s', self.conv_tol_grad)
         log.info('auxh_step = %g', self.auxh_step)
         log.info('auxh_min_step = %g', self.auxh_min_step)
@@ -145,24 +148,32 @@ class _GCSCF:
         return self
 
     def get_occ(self, mo_energy=None, mo_coeff=None):
-        if self.sigma is None or self.mu0 is None:
+        if self.sigma is None:
             return super().get_occ(mo_energy, mo_coeff)
         if self.sigma <= 0:
             raise ValueError('sigma must be positive for GC-SCF')
-        mo_occ = 2.0 * _fermi_smearing_occ(self.mu0, mo_energy, self.sigma)
+        if self.mu0 is None:
+            self.mu, mo_occ = _smearing_optimize(
+                _fermi_smearing_occ, mo_energy, self.mol.nelectron / 2.0,
+                self.sigma)
+        else:
+            self.mu = self.mu0
+            mo_occ = _fermi_smearing_occ(self.mu, mo_energy, self.sigma)
+        mo_occ = 2.0 * mo_occ
         self.entropy = _fermi_entropy(mo_occ)
-        logger.info(self, '    sigma = %g  mu0 = %.12g  entropy = %.12g',
-                    self.sigma, self.mu0, self.entropy)
+        logger.info(self, '    sigma = %g  Optimized mu = %.12g  '
+                    'entropy = %.12g', self.sigma, self.mu, self.entropy)
         return mo_occ
 
     def energy_tot(self, dm=None, h1e=None, vhf=None):
         e_tot = super().energy_tot(dm, h1e, vhf)
-        if self.sigma is not None and self.mu0 is not None and self.mo_occ is not None:
+        if self.sigma is not None and self.mo_occ is not None:
             self.entropy = _fermi_entropy(self.mo_occ)
             self.nelectron = float(numpy.sum(self.mo_occ))
             self.e_free = e_tot - self.sigma * self.entropy
             self.e_zero = e_tot - self.sigma * self.entropy * .5
-            self.e_grand = self.e_free - self.mu0 * self.nelectron
+            mu = self.mu0 if self.mu0 is not None else self.mu
+            self.e_grand = self.e_free - mu * self.nelectron
             logger.info(self, '    Total E(T) = %.15g  Free energy = %.15g  '
                         'Grand potential = %.15g',
                         e_tot, self.e_free, self.e_grand)
@@ -174,8 +185,6 @@ class _GCSCF:
             raise ValueError('sigma must be specified for GC-SCF')
         if self.sigma <= 0:
             raise ValueError('sigma must be positive for GC-SCF')
-        if self.mu0 is None:
-            raise ValueError('mu0 must be specified for GC-SCF')
 
         conv_tol = kwargs.pop('conv_tol', self.conv_tol)
         conv_tol_grad = kwargs.pop('conv_tol_grad', self.conv_tol_grad)
@@ -225,9 +234,14 @@ class _GCSCF:
         converged = residual_norm < conv_tol_grad
 
         log = logger.new_logger(self)
-        log.info('GC-SCF auxiliary-Hamiltonian minimization, '
-                 'sigma = %.12g Ha, mu0 = %.12g Ha',
-                 self.sigma, self.mu0)
+        if self.mu0 is None:
+            log.info('GC-SCF auxiliary-Hamiltonian minimization, '
+                     'sigma = %.12g Ha, fixed nelectron = %.12g',
+                     self.sigma, self.mol.nelectron)
+        else:
+            log.info('GC-SCF auxiliary-Hamiltonian minimization, '
+                     'sigma = %.12g Ha, mu0 = %.12g Ha',
+                     self.sigma, self.mu0)
 
         for cycle in range(1, max_cycle + 1):
             if converged:
@@ -328,7 +342,7 @@ class _GCSCF:
         self.e_free = float(state.e_free)
         self.e_zero = float(state.e_tot - self.sigma * state.entropy * .5)
         self.e_grand = float(state.e_grand)
-        self.mu = float(self.mu0)
+        self.mu = float(state.mu)
         self.entropy = float(state.entropy)
         self.nelectron = float(state.nelectron)
         self.mo_energy = numpy.array(state.mo_energy, copy=True)
@@ -378,7 +392,14 @@ def _haux_eval(mf, mo_energy, mo_coeff_orth, x, hcore_ao, hcore):
     mo_energy = numpy.asarray(mo_energy, dtype=float)
     mo_coeff_orth = numpy.asarray(mo_coeff_orth)
     mo_coeff = x @ mo_coeff_orth
-    mo_occ = 2.0 * _fermi_smearing_occ(mf.mu0, mo_energy, mf.sigma)
+    if mf.mu0 is None:
+        mu, mo_occ = _smearing_optimize(
+            _fermi_smearing_occ, mo_energy, mf.mol.nelectron / 2.0,
+            mf.sigma)
+    else:
+        mu = float(mf.mu0)
+        mo_occ = _fermi_smearing_occ(mu, mo_energy, mf.sigma)
+    mo_occ = 2.0 * mo_occ
     dm = mf.make_rdm1(mo_coeff, mo_occ)
     vhf = mf.get_veff(mf.mol, dm)
     fock = hcore + x.conj().T @ vhf @ x
@@ -387,17 +408,24 @@ def _haux_eval(mf, mo_energy, mo_coeff_orth, x, hcore_ao, hcore):
                   + mf.energy_nuc())
     e_free = e_tot - mf.sigma * entropy
     nelectron = float(numpy.sum(mo_occ))
-    e_grand = e_free - mf.mu0 * nelectron
+    e_grand = e_free - mu * nelectron
     hsub = mo_coeff_orth.conj().T @ fock @ mo_coeff_orth
     grad_filling = _hermitian_part(numpy.asarray(hsub)) - numpy.diag(mo_energy)
+    if mf.mu0 is None:
+        occ_prime = _fermi_occupation_derivative(mo_occ, mf.sigma)
+        denom = float(numpy.sum(occ_prime))
+        if abs(denom) > numpy.finfo(float).tiny:
+            dmu = float(occ_prime @ numpy.diag(grad_filling).real / denom)
+            grad_filling = grad_filling - numpy.eye(mo_energy.size) * dmu
     haux_gradient = _smearing_matrix_gradient(
         mo_energy, mo_occ, mf.sigma, grad_filling)
 
     return SimpleNamespace(
         mo_energy=mo_energy, mo_coeff=mo_coeff, mo_coeff_orth=mo_coeff_orth,
         mo_occ=mo_occ, dm=dm, vhf=vhf, fock=fock, hsub=hsub,
-        entropy=entropy, nelectron=nelectron, e_tot=e_tot,
-        e_free=e_free, e_grand=e_grand, objective=e_grand,
+        entropy=entropy, nelectron=nelectron, mu=mu, e_tot=e_tot,
+        e_free=e_free, e_grand=e_grand,
+        objective=e_free if mf.mu0 is None else e_grand,
         haux_gradient=haux_gradient)
 
 
