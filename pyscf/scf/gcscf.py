@@ -90,7 +90,7 @@ def remove_gcscf(mf):
 class _GCSCF:
     '''Finite-temperature SCF via auxiliary-Hamiltonian minimization.'''
 
-    __name_mixin__ = 'GC-SCF'
+    __name_mixin__ = 'GC'
 
     _keys = {
         'sigma', 'mu0', 'fix_spin', 'auxh_step', 'auxh_min_step',
@@ -440,8 +440,9 @@ class _GCSCF:
         return self
 
     def to_gpu(self):
-        obj = gcscf(self.undo_gcscf().to_gpu(), self.sigma, self.mu0,
-                    self.fix_spin)
+        from gpu4pyscf.scf import gcscf as gpu_gcscf
+        obj = gpu_gcscf.gcscf(self.undo_gcscf().to_gpu(), self.sigma,
+                              self.mu0, self.fix_spin)
         obj.conv_tol_grad = self.conv_tol_grad
         obj.auxh_step = self.auxh_step
         obj.auxh_min_step = self.auxh_min_step
