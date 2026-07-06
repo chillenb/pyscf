@@ -24,23 +24,25 @@ from pyscf.scf.smearing import _fermi_smearing_occ, _smearing_optimize
 
 
 GCSCF_SIGMA = getattr(__config__, 'scf_gcscf_sigma', None)
-GCSCF_CONV_TOL_GRAD = getattr(__config__, 'scf_gcscf_conv_tol_grad', None)
 GCSCF_STEP = getattr(__config__, 'scf_gcscf_step', 1.0)
 GCSCF_MIN_STEP = getattr(__config__, 'scf_gcscf_min_step', 1e-4)
 GCSCF_LINE_MAX_CYCLE = getattr(__config__, 'scf_gcscf_line_max_cycle', 6)
 
 
-def gcscf(mf, sigma=None, mu0=None):
+def gcscf(mf, sigma=None, mu0=None, fix_spin=False):
     '''Finite-temperature SCF via auxiliary-Hamiltonian minimization.
 
     Args:
-        mf : an RHF or RKS object
-            Molecular restricted mean-field object to decorate.
+        mf : an RHF, RKS, UHF, or UKS object
+            Molecular mean-field object to decorate.
         sigma : float
             Electronic temperature in Hartree.
         mu0 : float or None
             Fixed chemical potential in Hartree.  If None, the electron number
             is fixed to ``mol.nelectron``.
+        fix_spin : bool
+            For UHF/UKS, whether to use separate alpha and beta chemical
+            potentials to preserve ``mf.nelec`` when ``mu0`` is None.
 
     Examples:
 
@@ -51,18 +53,22 @@ def gcscf(mf, sigma=None, mu0=None):
         if sigma is not None:
             mf.sigma = sigma
         mf.mu0 = mu0
+        mf.fix_spin = fix_spin
         return mf
 
     if mf.istype('_CIAH_SOSCF'):
         raise NotImplementedError('GC-SCF with second order SCF is not supported')
     if mf.istype('KSCF') or hasattr(mf, 'cell'):
         raise NotImplementedError('Use the PBC GC-SCF implementation for k-point objects')
-    if mf.istype('ROHF') or mf.istype('UHF') or mf.istype('GHF'):
-        raise NotImplementedError('GC-SCF currently supports molecular RHF/RKS objects')
-    if not mf.istype('RHF'):
-        raise NotImplementedError('GC-SCF currently supports molecular RHF/RKS objects')
+    if mf.istype('ROHF') or mf.istype('GHF'):
+        raise NotImplementedError('GC-SCF currently supports molecular RHF/RKS '
+                                  'and UHF/UKS objects')
+    if not (mf.istype('RHF') or mf.istype('UHF')):
+        raise NotImplementedError('GC-SCF currently supports molecular RHF/RKS '
+                                  'and UHF/UKS objects')
 
-    return lib.set_class(_GCSCF(mf, sigma, mu0), (_GCSCF, mf.__class__))
+    return lib.set_class(_GCSCF(mf, sigma, mu0, fix_spin),
+                         (_GCSCF, mf.__class__))
 
 
 def gcscf_(mf, *args, **kwargs):
@@ -87,17 +93,17 @@ class _GCSCF:
     __name_mixin__ = 'GC-SCF'
 
     _keys = {
-        'sigma', 'mu0', 'auxh_step', 'auxh_min_step',
+        'sigma', 'mu0', 'fix_spin', 'auxh_step', 'auxh_min_step',
         'auxh_line_max_cycle', 'entropy', 'e_free', 'e_zero', 'e_grand',
         'mu', 'nelectron', 'haux', 'n_haux_eval', 'auxh_residual_norm',
     }
 
-    def __init__(self, mf, sigma, mu0):
+    def __init__(self, mf, sigma, mu0, fix_spin):
         self.__dict__.update(mf.__dict__)
         self.sigma = GCSCF_SIGMA if sigma is None else sigma
         self.mu0 = mu0
-        if GCSCF_CONV_TOL_GRAD is not None:
-            self.conv_tol_grad = GCSCF_CONV_TOL_GRAD
+        self.fix_spin = fix_spin
+        self.conv_tol_grad = None
         self.auxh_step = GCSCF_STEP
         self.auxh_min_step = GCSCF_MIN_STEP
         self.auxh_line_max_cycle = GCSCF_LINE_MAX_CYCLE
@@ -116,6 +122,7 @@ class _GCSCF:
         obj = lib.view(self, lib.drop_class(self.__class__, _GCSCF))
         del obj.sigma
         del obj.mu0
+        del obj.fix_spin
         del obj.auxh_step
         del obj.auxh_min_step
         del obj.auxh_line_max_cycle
@@ -141,6 +148,7 @@ class _GCSCF:
                      self.mol.nelectron)
         else:
             log.info('mu0 = %s', self.mu0)
+        log.info('fix_spin = %s', self.fix_spin)
         log.info('conv_tol_grad = %s', self.conv_tol_grad)
         log.info('auxh_step = %g', self.auxh_step)
         log.info('auxh_min_step = %g', self.auxh_min_step)
@@ -152,28 +160,69 @@ class _GCSCF:
             return super().get_occ(mo_energy, mo_coeff)
         if self.sigma <= 0:
             raise ValueError('sigma must be positive for GC-SCF')
-        if self.mu0 is None:
-            self.mu, mo_occ = _smearing_optimize(
-                _fermi_smearing_occ, mo_energy, self.mol.nelectron / 2.0,
-                self.sigma)
+
+        mo_energy = numpy.asarray(mo_energy, dtype=float)
+        if mo_energy.ndim == 1:
+            if self.mu0 is None:
+                self.mu, mo_occ = _smearing_optimize(
+                    _fermi_smearing_occ, mo_energy, self.mol.nelectron / 2.0,
+                    self.sigma)
+            else:
+                self.mu = float(self.mu0)
+                mo_occ = _fermi_smearing_occ(self.mu, mo_energy, self.sigma)
+            mo_occ = 2.0 * mo_occ
+            self.entropy = _fermi_entropy(mo_occ, 2.0)
+        elif self.fix_spin:
+            if self.mu0 is None:
+                self.mu = numpy.empty(2)
+                mo_occ = numpy.empty_like(mo_energy)
+                for s in range(2):
+                    self.mu[s], mo_occ[s] = _smearing_optimize(
+                        _fermi_smearing_occ, mo_energy[s], self.nelec[s],
+                        self.sigma)
+            else:
+                if numpy.isscalar(self.mu0):
+                    self.mu = numpy.array([float(self.mu0), float(self.mu0)])
+                elif len(self.mu0) == 2:
+                    self.mu = numpy.asarray(self.mu0, dtype=float)
+                else:
+                    raise TypeError(f'Unsupported mu0: {self.mu0}')
+                mo_occ = numpy.asarray([
+                    _fermi_smearing_occ(self.mu[s], mo_energy[s], self.sigma)
+                    for s in range(2)
+                ])
+            self.entropy = _fermi_entropy(mo_occ, 1.0)
         else:
-            self.mu = self.mu0
-            mo_occ = _fermi_smearing_occ(self.mu, mo_energy, self.sigma)
-        mo_occ = 2.0 * mo_occ
-        self.entropy = _fermi_entropy(mo_occ)
-        logger.info(self, '    sigma = %g  Optimized mu = %.12g  '
+            mo_energy_flat = mo_energy.reshape(-1)
+            if self.mu0 is None:
+                self.mu, mo_occ = _smearing_optimize(
+                    _fermi_smearing_occ, mo_energy_flat, self.mol.nelectron,
+                    self.sigma)
+            else:
+                if not numpy.isscalar(self.mu0):
+                    raise TypeError(f'Unsupported mu0: {self.mu0}')
+                self.mu = float(self.mu0)
+                mo_occ = _fermi_smearing_occ(self.mu, mo_energy_flat,
+                                             self.sigma)
+            mo_occ = mo_occ.reshape(mo_energy.shape)
+            self.entropy = _fermi_entropy(mo_occ, 1.0)
+        logger.info(self, '    sigma = %g  Optimized mu = %s  '
                     'entropy = %.12g', self.sigma, self.mu, self.entropy)
         return mo_occ
 
     def energy_tot(self, dm=None, h1e=None, vhf=None):
         e_tot = super().energy_tot(dm, h1e, vhf)
         if self.sigma is not None and self.mo_occ is not None:
-            self.entropy = _fermi_entropy(self.mo_occ)
+            spin_degeneracy = 2.0 if numpy.asarray(self.mo_occ).ndim == 1 else 1.0
+            self.entropy = _fermi_entropy(self.mo_occ, spin_degeneracy)
             self.nelectron = float(numpy.sum(self.mo_occ))
             self.e_free = e_tot - self.sigma * self.entropy
             self.e_zero = e_tot - self.sigma * self.entropy * .5
-            mu = self.mu0 if self.mu0 is not None else self.mu
-            self.e_grand = self.e_free - mu * self.nelectron
+            mu = numpy.asarray(self.mu0 if self.mu0 is not None else self.mu)
+            if mu.ndim == 0:
+                self.e_grand = self.e_free - float(mu) * self.nelectron
+            else:
+                self.e_grand = self.e_free - mu @ numpy.sum(self.mo_occ, axis=1)
             logger.info(self, '    Total E(T) = %.15g  Free energy = %.15g  '
                         'Grand potential = %.15g',
                         e_tot, self.e_free, self.e_grand)
@@ -222,8 +271,12 @@ class _GCSCF:
             dm0 = self.get_init_guess(self.mol, key=self.init_guess)
 
         vhf_ao = self.get_veff(self.mol, dm0)
-        haux = _hermitian_part(hcore + x.conj().T @ vhf_ao @ x)
-        mo_energy, mo_coeff_orth = scipy.linalg.eigh(haux)
+        if self.istype('UHF'):
+            vhf = numpy.asarray([x.conj().T @ v @ x for v in vhf_ao])
+        else:
+            vhf = x.conj().T @ vhf_ao @ x
+        haux = _hermitian_part(hcore + vhf)
+        mo_energy, mo_coeff_orth = _eigh_tensor(haux)
         state = haux_eval_counting(mo_energy, mo_coeff_orth)
         residual_norm = float(numpy.linalg.norm(state.haux_gradient))
         alpha_t = float(self.auxh_step)
@@ -240,7 +293,7 @@ class _GCSCF:
                      self.sigma, self.mol.nelectron)
         else:
             log.info('GC-SCF auxiliary-Hamiltonian minimization, '
-                     'sigma = %.12g Ha, mu0 = %.12g Ha',
+                     'sigma = %.12g Ha, mu0 = %s Ha',
                      self.sigma, self.mu0)
 
         for cycle in range(1, max_cycle + 1):
@@ -249,7 +302,7 @@ class _GCSCF:
 
             gradient = state.haux_gradient
             steepest_direction = _hermitian_part(
-                state.hsub - numpy.diag(numpy.asarray(state.mo_energy, dtype=float))
+                state.hsub - _make_diagonal(state.mo_energy)
             )
             gknorm = -float(numpy.vdot(gradient, steepest_direction).real)
             beta = 0.0
@@ -280,7 +333,7 @@ class _GCSCF:
                 direction = _hermitian_part(-gradient)
 
             line_eval_start = n_haux_eval
-            line_result = _line_minimize_auxiliary_hamiltonian(
+            line_result = _line_minimize(
                 haux_eval_counting, haux, direction, state,
                 alpha_t=alpha_t, alpha_t_min=self.auxh_min_step,
                 max_cycle=self.auxh_line_max_cycle)
@@ -288,7 +341,7 @@ class _GCSCF:
                 beta = 0.0
                 cg_reset = True
                 direction = steepest_direction
-                line_result = _line_minimize_auxiliary_hamiltonian(
+                line_result = _line_minimize(
                     haux_eval_counting, haux, direction, state,
                     alpha_t=alpha_t, alpha_t_min=self.auxh_min_step,
                     max_cycle=self.auxh_line_max_cycle)
@@ -312,11 +365,12 @@ class _GCSCF:
             alpha_t = line_result.next_alpha_t
             if alpha_t < self.auxh_min_step:
                 alpha_t = float(self.auxh_step)
+            rot = line_result.rotation
             previous_gradient = _hermitian_part(
-                line_result.rotation.T.conj() @ gradient @ line_result.rotation
+                _matrix_rotation(gradient, rot)
             )
             previous_direction = _hermitian_part(
-                line_result.rotation.T.conj() @ direction @ line_result.rotation
+                _matrix_rotation(direction, rot)
             )
             previous_gknorm = gknorm
             d_objective = state.objective - old_objective
@@ -342,14 +396,20 @@ class _GCSCF:
         self.e_free = float(state.e_free)
         self.e_zero = float(state.e_tot - self.sigma * state.entropy * .5)
         self.e_grand = float(state.e_grand)
-        self.mu = float(state.mu)
+        mu = numpy.asarray(state.mu)
+        self.mu = float(mu) if mu.ndim == 0 else numpy.array(mu, copy=True)
         self.entropy = float(state.entropy)
         self.nelectron = float(state.nelectron)
         self.mo_energy = numpy.array(state.mo_energy, copy=True)
         self.mo_coeff = numpy.array(state.mo_coeff, copy=True)
         self.mo_occ = numpy.array(state.mo_occ, copy=True)
-        self.haux = numpy.array(_hermitian_part(S @ x @ haux @ x.conj().T @ S),
-                                copy=True)
+        if haux.ndim == 2:
+            self.haux = numpy.array(
+                _hermitian_part(S @ x @ haux @ x.conj().T @ S), copy=True)
+        else:
+            self.haux = numpy.array(_hermitian_part(numpy.asarray([
+                S @ x @ h @ x.conj().T @ S for h in haux
+            ])), copy=True)
         self.n_haux_eval = n_haux_eval
         self.auxh_residual_norm = float(residual_norm)
         self.cycles = niter_done
@@ -380,7 +440,8 @@ class _GCSCF:
         return self
 
     def to_gpu(self):
-        obj = gcscf(self.undo_gcscf().to_gpu(), self.sigma, self.mu0)
+        obj = gcscf(self.undo_gcscf().to_gpu(), self.sigma, self.mu0,
+                    self.fix_spin)
         obj.conv_tol_grad = self.conv_tol_grad
         obj.auxh_step = self.auxh_step
         obj.auxh_min_step = self.auxh_min_step
@@ -391,34 +452,109 @@ class _GCSCF:
 def _haux_eval(mf, mo_energy, mo_coeff_orth, x, hcore_ao, hcore):
     mo_energy = numpy.asarray(mo_energy, dtype=float)
     mo_coeff_orth = numpy.asarray(mo_coeff_orth)
-    mo_coeff = x @ mo_coeff_orth
-    if mf.mu0 is None:
-        mu, mo_occ = _smearing_optimize(
-            _fermi_smearing_occ, mo_energy, mf.mol.nelectron / 2.0,
-            mf.sigma)
+
+    if mo_energy.ndim == 1:
+        mo_coeff = x @ mo_coeff_orth
+        if mf.mu0 is None:
+            mu, mo_occ = _smearing_optimize(
+                _fermi_smearing_occ, mo_energy, mf.mol.nelectron / 2.0,
+                mf.sigma)
+        else:
+            mu = float(mf.mu0)
+            mo_occ = _fermi_smearing_occ(mu, mo_energy, mf.sigma)
+        mo_occ = 2.0 * mo_occ
+
+        dm = mf.make_rdm1(mo_coeff, mo_occ)
+        vhf = mf.get_veff(mf.mol, dm)
+        fock = hcore + x.conj().T @ vhf @ x
+        entropy = _fermi_entropy(mo_occ, 2.0)
+        e_tot = float(mf.energy_elec(dm=dm, h1e=hcore_ao, vhf=vhf)[0]
+                      + mf.energy_nuc())
+        e_free = e_tot - mf.sigma * entropy
+        nelectron = float(numpy.sum(mo_occ))
+        e_grand = float(e_free - mu * nelectron)
+        hsub = mo_coeff_orth.conj().T @ fock @ mo_coeff_orth
+        grad_filling = _hermitian_part(numpy.asarray(hsub)) - numpy.diag(mo_energy)
+        if mf.mu0 is None:
+            occ_prime = _fermi_occupation_derivative(mo_occ, mf.sigma, 2.0)
+            denom = float(numpy.sum(occ_prime))
+            if abs(denom) > numpy.finfo(float).tiny:
+                dmu = float(occ_prime @ numpy.diag(grad_filling).real / denom)
+                grad_filling = (grad_filling
+                                - numpy.eye(mo_energy.size) * dmu)
+        haux_gradient = _smearing_matrix_gradient(
+            mo_energy, mo_occ, mf.sigma, grad_filling, 2.0)
+
     else:
-        mu = float(mf.mu0)
-        mo_occ = _fermi_smearing_occ(mu, mo_energy, mf.sigma)
-    mo_occ = 2.0 * mo_occ
-    dm = mf.make_rdm1(mo_coeff, mo_occ)
-    vhf = mf.get_veff(mf.mol, dm)
-    fock = hcore + x.conj().T @ vhf @ x
-    entropy = _fermi_entropy(mo_occ)
-    e_tot = float(mf.energy_elec(dm=dm, h1e=hcore_ao, vhf=vhf)[0]
-                  + mf.energy_nuc())
-    e_free = e_tot - mf.sigma * entropy
-    nelectron = float(numpy.sum(mo_occ))
-    e_grand = e_free - mu * nelectron
-    hsub = mo_coeff_orth.conj().T @ fock @ mo_coeff_orth
-    grad_filling = _hermitian_part(numpy.asarray(hsub)) - numpy.diag(mo_energy)
-    if mf.mu0 is None:
-        occ_prime = _fermi_occupation_derivative(mo_occ, mf.sigma)
-        denom = float(numpy.sum(occ_prime))
-        if abs(denom) > numpy.finfo(float).tiny:
-            dmu = float(occ_prime @ numpy.diag(grad_filling).real / denom)
-            grad_filling = grad_filling - numpy.eye(mo_energy.size) * dmu
-    haux_gradient = _smearing_matrix_gradient(
-        mo_energy, mo_occ, mf.sigma, grad_filling)
+        mo_coeff = numpy.asarray([x @ c for c in mo_coeff_orth])
+        if mf.fix_spin:
+            if mf.mu0 is None:
+                mu = numpy.empty(2)
+                mo_occ = numpy.empty_like(mo_energy)
+                for s in range(2):
+                    mu[s], mo_occ[s] = _smearing_optimize(
+                        _fermi_smearing_occ, mo_energy[s], mf.nelec[s],
+                        mf.sigma)
+            else:
+                if numpy.isscalar(mf.mu0):
+                    mu = numpy.array([float(mf.mu0), float(mf.mu0)])
+                elif len(mf.mu0) == 2:
+                    mu = numpy.asarray(mf.mu0, dtype=float)
+                else:
+                    raise TypeError(f'Unsupported mu0: {mf.mu0}')
+                mo_occ = numpy.asarray([
+                    _fermi_smearing_occ(mu[s], mo_energy[s], mf.sigma)
+                    for s in range(2)
+                ])
+        else:
+            mo_energy_flat = mo_energy.reshape(-1)
+            if mf.mu0 is None:
+                mu, mo_occ = _smearing_optimize(
+                    _fermi_smearing_occ, mo_energy_flat, mf.mol.nelectron,
+                    mf.sigma)
+            else:
+                if not numpy.isscalar(mf.mu0):
+                    raise TypeError(f'Unsupported mu0: {mf.mu0}')
+                mu = float(mf.mu0)
+                mo_occ = _fermi_smearing_occ(mu, mo_energy_flat, mf.sigma)
+            mo_occ = mo_occ.reshape(mo_energy.shape)
+
+        dm = mf.make_rdm1(mo_coeff, mo_occ)
+        vhf = mf.get_veff(mf.mol, dm)
+        fock = hcore + numpy.asarray([x.conj().T @ v @ x for v in vhf])
+        entropy = _fermi_entropy(mo_occ, 1.0)
+        e_tot = float(mf.energy_elec(dm=dm, h1e=hcore_ao, vhf=vhf)[0]
+                      + mf.energy_nuc())
+        e_free = e_tot - mf.sigma * entropy
+        nelectron = float(numpy.sum(mo_occ))
+        mu_array = numpy.asarray(mu)
+        if mu_array.ndim == 0:
+            e_grand = float(e_free - float(mu_array) * nelectron)
+        else:
+            e_grand = float(e_free - mu_array @ numpy.sum(mo_occ, axis=1))
+        hsub = (mo_coeff_orth.swapaxes(-1, -2).conj()
+                @ fock @ mo_coeff_orth)
+        grad_filling = _hermitian_part(hsub) - _make_diagonal(mo_energy)
+        if mf.mu0 is None:
+            occ_prime = _fermi_occupation_derivative(mo_occ, mf.sigma, 1.0)
+            diag_grad = numpy.diagonal(grad_filling, axis1=-2,
+                                       axis2=-1).real
+            if mf.fix_spin:
+                dmu = numpy.zeros(2)
+                for s in range(2):
+                    denom = float(numpy.sum(occ_prime[s]))
+                    if abs(denom) > numpy.finfo(float).tiny:
+                        dmu[s] = numpy.sum(occ_prime[s] * diag_grad[s]) / denom
+                grad_filling = grad_filling - _make_diagonal(
+                    numpy.repeat(dmu[:,None], mo_energy.shape[1], axis=1))
+            else:
+                denom = float(numpy.sum(occ_prime))
+                if abs(denom) > numpy.finfo(float).tiny:
+                    dmu = float(numpy.sum(occ_prime * diag_grad) / denom)
+                    grad_filling = grad_filling - _make_diagonal(
+                        numpy.full_like(mo_energy, dmu))
+        haux_gradient = _smearing_matrix_gradient(
+            mo_energy, mo_occ, mf.sigma, grad_filling, 1.0)
 
     return SimpleNamespace(
         mo_energy=mo_energy, mo_coeff=mo_coeff, mo_coeff_orth=mo_coeff_orth,
@@ -429,7 +565,51 @@ def _haux_eval(mf, mo_energy, mo_coeff_orth, x, hcore_ao, hcore):
         haux_gradient=haux_gradient)
 
 
-def _line_minimize_auxiliary_hamiltonian(haux_eval, haux, direction, state, alpha_t,
+def _eigh_tensor(A):
+    if A.ndim == 2:
+        return scipy.linalg.eigh(A)
+    mo_energy = []
+    mo_coeff = []
+    for block in A:
+        e, c = scipy.linalg.eigh(block)
+        mo_energy.append(e)
+        mo_coeff.append(c)
+    return numpy.asarray(mo_energy), numpy.asarray(mo_coeff)
+
+
+def _make_diagonal(vv):
+    if vv.ndim == 1:
+        return numpy.diag(vv)
+    return numpy.asarray([numpy.diag(v) for v in vv])
+
+
+def _identity_rotation(mo_energy):
+    nmo = mo_energy.shape[-1]
+    if mo_energy.ndim == 1:
+        return numpy.eye(nmo)
+    else:
+        nspin = mo_energy.shape[0]
+        return numpy.asarray([numpy.eye(nmo) for _ in range(nspin)])
+
+
+def _matrix_rotation(mat, rot):
+    if mat.ndim == 2 and rot.ndim == 2:
+        return rot.conj().T @ mat @ rot
+    elif mat.ndim == 3 and rot.ndim == 3:
+        return numpy.asarray([r.conj().T @ m @ r for m, r in zip(mat, rot)])
+    else:
+        raise ValueError("Input matrix must be 2D or 3D")
+
+
+def _haux_from_mo(mo_energy, mo_coeff_orth):
+    mo_energy = numpy.asarray(mo_energy, dtype=float)
+    mo_coeff_orth = numpy.asarray(mo_coeff_orth)
+    if mo_energy.ndim == 1:
+        return (mo_coeff_orth * mo_energy[:, None]) @ mo_coeff_orth.conj().T
+    else:
+        return _hermitian_part((mo_coeff_orth * mo_energy[:, None, :]) @ mo_coeff_orth.conj().transpose(0,2,1))
+
+def _line_minimize(haux_eval, haux, direction, state, alpha_t,
                                          alpha_t_min, max_cycle):
     if alpha_t <= 0:
         raise ValueError('auxh_step must be positive')
@@ -443,8 +623,8 @@ def _line_minimize_auxiliary_hamiltonian(haux_eval, haux, direction, state, alph
     objective_slop = 1e-12
     objective0 = float(state.objective)
     gdotd = float(numpy.vdot(state.haux_gradient, direction).real)
-    identity = numpy.eye(state.mo_energy.size)
-    haux_eigenbasis = numpy.diag(state.mo_energy)
+    identity = _identity_rotation(state.mo_energy)
+    haux_eigenbasis = _make_diagonal(state.mo_energy)
     mo_coeff0 = state.mo_coeff_orth
     line_candidates = [
         (0.0, state, float(numpy.linalg.norm(state.haux_gradient)), haux, identity)
@@ -465,11 +645,10 @@ def _line_minimize_auxiliary_hamiltonian(haux_eval, haux, direction, state, alph
         alpha = float(max(alpha, 0.0))
         trial_haux_eigenbasis = _hermitian_part(haux_eigenbasis
                                                 + alpha * direction)
-        mo_energy, rotation = scipy.linalg.eigh(trial_haux_eigenbasis)
+        mo_energy, rotation = _eigh_tensor(trial_haux_eigenbasis)
         mo_coeff_orth = mo_coeff0 @ rotation
         trial_state = haux_eval(mo_energy, mo_coeff_orth)
-        weighted_coeff = mo_coeff_orth * numpy.asarray(mo_energy, dtype=float)
-        trial_haux = _hermitian_part(weighted_coeff @ mo_coeff_orth.T.conj())
+        trial_haux = _haux_from_mo(mo_energy, mo_coeff_orth)
         result = (
             alpha, trial_state,
             float(numpy.linalg.norm(trial_state.haux_gradient)),
@@ -481,7 +660,7 @@ def _line_minimize_auxiliary_hamiltonian(haux_eval, haux, direction, state, alph
     niter = 0
     alpha_trial = float(alpha_t)
     alpha = alpha_trial
-    for unused in range(max_cycle):
+    for _ in range(max_cycle):
         if alpha_trial < alpha_t_min:
             return line_result(line_candidates[0], niter, alpha_trial, False,
                                'test step fell below auxh_min_step')
@@ -528,7 +707,7 @@ def _line_minimize_auxiliary_hamiltonian(haux_eval, haux, direction, state, alph
         return _best_line_min_candidate(line_candidates, niter,
                                         'test step adjustment failed')
 
-    for unused in range(max_cycle):
+    for _ in range(max_cycle):
         niter += 1
         trial_state = make_trialstate(alpha)[1]
         trial_objective = float(trial_state.objective)
@@ -567,10 +746,19 @@ def _best_line_min_candidate(line_candidates, niter, failure_message,
                  if best_alpha != 0.0 else failure_message))
 
 
-def _smearing_matrix_gradient(eta, mo_occ, sigma, grad_filling):
+def _smearing_matrix_gradient(eta, mo_occ, sigma, grad_filling,
+                              spin_degeneracy):
     eta = numpy.asarray(eta, dtype=float)
     mo_occ = numpy.asarray(mo_occ, dtype=float)
-    occ_prime = _fermi_occupation_derivative(mo_occ, sigma)
+    grad_filling = numpy.asarray(grad_filling)
+    if eta.ndim == 2:
+        return numpy.asarray([
+            _smearing_matrix_gradient(eta[s], mo_occ[s], sigma,
+                                      grad_filling[s], spin_degeneracy)
+            for s in range(eta.shape[0])
+        ])
+
+    occ_prime = _fermi_occupation_derivative(mo_occ, sigma, spin_degeneracy)
     energy_diff = eta[:,None] - eta[None,:]
     occ_diff = mo_occ[:,None] - mo_occ[None,:]
 
@@ -581,25 +769,31 @@ def _smearing_matrix_gradient(eta, mo_occ, sigma, grad_filling):
             where=numpy.abs(energy_diff) > 1e-12)
 
     near_degenerate = numpy.isclose(energy_diff, 0.0, atol=1e-12, rtol=1e-12)
-    derivative_average = .5 * (occ_prime[:,None] + occ_prime[None,:])
+    derivative_average = .5 * (occ_prime[:, None] + occ_prime[None, :])
     factors[near_degenerate] = derivative_average[near_degenerate]
 
     return _hermitian_part(_hermitian_part(grad_filling) * factors)
 
 
-def _fermi_occupation_derivative(mo_occ, sigma):
-    f = numpy.asarray(mo_occ, dtype=float) * .5
-    return -2.0 * f * (1.0 - f) / sigma
+def _fermi_occupation_derivative(mo_occ, sigma, spin_degeneracy):
+    f = numpy.asarray(mo_occ, dtype=float) / spin_degeneracy
+    return -spin_degeneracy * f * (1.0 - f) / sigma
 
 
-def _fermi_entropy(mo_occ):
-    f = numpy.asarray(mo_occ, dtype=float) * .5
+def _fermi_entropy(mo_occ, spin_degeneracy):
+    f = numpy.asarray(mo_occ, dtype=float) / spin_degeneracy
     f = f[(f > 0.0) & (f < 1.0)]
     if f.size == 0:
         return 0.0
     entropy_per_spin = -(f * numpy.log(f) + (1.0 - f) * numpy.log(1.0 - f)).sum()
-    return float(2.0 * entropy_per_spin)
+    return float(spin_degeneracy * entropy_per_spin)
 
 
 def _hermitian_part(matrix):
-    return 0.5 * lib.hermi_sum(matrix)
+    matrix = numpy.asarray(matrix)
+    if matrix.ndim == 2:
+        return 0.5 * lib.hermi_sum(matrix)
+    elif matrix.ndim == 3:
+        return 0.5 * lib.hermi_sum(matrix, axes=(0, 2, 1))
+    else:
+        raise ValueError("Input matrix must be 2D or 3D")

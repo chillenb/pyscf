@@ -42,8 +42,8 @@ def tearDownModule():
     del mol
 
 
-def _run_gcscf(mf, sigma=.01, mu0=-.2):
-    mf = gcscf.gcscf(mf, sigma=sigma, mu0=mu0)
+def _run_gcscf(mf, sigma=.01, mu0=-.2, fix_spin=False):
+    mf = gcscf.gcscf(mf, sigma=sigma, mu0=mu0, fix_spin=fix_spin)
     mf.conv_tol = 1e-10
     mf.conv_tol_grad = 1e-8
     mf.max_cycle = 100
@@ -52,8 +52,9 @@ def _run_gcscf(mf, sigma=.01, mu0=-.2):
     return mf
 
 
-def _run_smearing_reference(mf, sigma=.01, mu0=-.2):
-    mf = smearing_(mf, sigma=sigma, method='fermi', mu0=mu0)
+def _run_smearing_reference(mf, sigma=.01, mu0=-.2, fix_spin=False):
+    mf = smearing_(mf, sigma=sigma, method='fermi', mu0=mu0,
+                   fix_spin=fix_spin)
     mf.conv_tol = 1e-10
     mf.conv_tol_grad = 1e-8
     mf.max_cycle = 100
@@ -114,6 +115,71 @@ class KnownValues(unittest.TestCase):
         self.assertLess(abs(mf.mo_occ - mf_ref.mo_occ).max(), 1e-6)
         self.assertLess(mf.auxh_residual_norm, mf.conv_tol_grad)
 
+    def test_uhf_gcscf(self):
+        mf = _run_gcscf(scf.UHF(mol))
+        mf_ref = _run_smearing_reference(scf.UHF(mol))
+        e_grand_ref = mf_ref.e_free - mf.mu0 * mf_ref.mo_occ.sum()
+
+        self.assertTrue(mf.converged)
+        self.assertTrue(mf_ref.converged)
+        self.assertAlmostEqual(mf.e_tot, mf_ref.e_tot, 7)
+        self.assertAlmostEqual(mf.e_free, mf_ref.e_free, 7)
+        self.assertAlmostEqual(mf.e_grand, e_grand_ref, 7)
+        self.assertLess(abs(mf.nelectron - mf_ref.mo_occ.sum()), 1e-6)
+        self.assertLess(abs(mf.entropy - mf_ref.entropy), 1e-6)
+        self.assertLess(abs(mf.mo_occ - mf_ref.mo_occ).max(), 1e-7)
+        self.assertLess(mf.auxh_residual_norm, mf.conv_tol_grad)
+
+    def test_uhf_gcscf_fixed_nelectron_default(self):
+        mf = _run_gcscf(scf.UHF(mol), mu0=None)
+        mf_ref = _run_smearing_reference(scf.UHF(mol), mu0=None)
+
+        self.assertIsNone(mf.mu0)
+        self.assertTrue(mf.converged)
+        self.assertTrue(mf_ref.converged)
+        self.assertAlmostEqual(mf.e_tot, mf_ref.e_tot, 7)
+        self.assertAlmostEqual(mf.e_free, mf_ref.e_free, 7)
+        self.assertAlmostEqual(mf.nelectron, mol.nelectron, 7)
+        self.assertLess(abs(mf.entropy - mf_ref.entropy), 1e-6)
+        self.assertLess(abs(mf.mo_occ - mf_ref.mo_occ).max(), 1e-7)
+        self.assertLess(mf.auxh_residual_norm, mf.conv_tol_grad)
+
+    def test_uhf_gcscf_fix_spin(self):
+        mf = _run_gcscf(scf.UHF(mol), mu0=None, fix_spin=True)
+        mf_ref = _run_smearing_reference(scf.UHF(mol), mu0=None,
+                                         fix_spin=True)
+
+        self.assertTrue(mf.fix_spin)
+        self.assertTrue(mf.converged)
+        self.assertTrue(mf_ref.converged)
+        self.assertAlmostEqual(mf.e_tot, mf_ref.e_tot, 7)
+        self.assertAlmostEqual(mf.e_free, mf_ref.e_free, 7)
+        self.assertLess(abs(mf.mo_occ[0].sum() - mf.nelec[0]), 1e-7)
+        self.assertLess(abs(mf.mo_occ[1].sum() - mf.nelec[1]), 1e-7)
+        self.assertLess(abs(mf.entropy - mf_ref.entropy), 1e-6)
+        self.assertLess(abs(mf.mo_occ - mf_ref.mo_occ).max(), 1e-7)
+        self.assertLess(mf.auxh_residual_norm, mf.conv_tol_grad)
+
+    def test_uks_gcscf(self):
+        mf0 = dft.UKS(mol)
+        mf0.xc = 'pbe0'
+        mf = _run_gcscf(mf0)
+
+        mf_ref = dft.UKS(mol)
+        mf_ref.xc = 'pbe0'
+        mf_ref = _run_smearing_reference(mf_ref)
+        e_grand_ref = mf_ref.e_free - mf.mu0 * mf_ref.mo_occ.sum()
+
+        self.assertTrue(mf.converged)
+        self.assertTrue(mf_ref.converged)
+        self.assertAlmostEqual(mf.e_tot, mf_ref.e_tot, 6)
+        self.assertAlmostEqual(mf.e_free, mf_ref.e_free, 6)
+        self.assertAlmostEqual(mf.e_grand, e_grand_ref, 6)
+        self.assertLess(abs(mf.nelectron - mf_ref.mo_occ.sum()), 1e-6)
+        self.assertLess(abs(mf.entropy - mf_ref.entropy), 1e-6)
+        self.assertLess(abs(mf.mo_occ - mf_ref.mo_occ).max(), 1e-6)
+        self.assertLess(mf.auxh_residual_norm, mf.conv_tol_grad)
+
     def test_gcscf_decorator(self):
         mf = scf.RHF(mol)
         self.assertIs(gcscf.gcscf_(mf, sigma=.1, mu0=-.2), mf)
@@ -126,12 +192,9 @@ class KnownValues(unittest.TestCase):
         self.assertFalse(hasattr(mf1, 'sigma'))
         self.assertFalse(hasattr(mf1, 'mu0'))
 
-    def test_unsupported_spin(self):
-        mol1 = mol.copy()
-        mol1.spin = 2
-        mol1.build(False, False)
+    def test_unsupported_rohf(self):
         with self.assertRaises(NotImplementedError):
-            gcscf.gcscf(scf.UHF(mol1), sigma=.1, mu0=-.2)
+            gcscf.gcscf(scf.ROHF(mol), sigma=.1, mu0=-.2)
 
 
 if __name__ == "__main__":
