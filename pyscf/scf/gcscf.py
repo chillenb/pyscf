@@ -604,9 +604,11 @@ def _haux_from_mo(mo_energy, mo_coeff_orth):
     mo_energy = numpy.asarray(mo_energy, dtype=float)
     mo_coeff_orth = numpy.asarray(mo_coeff_orth)
     if mo_energy.ndim == 1:
-        return (mo_coeff_orth * mo_energy[:, None]) @ mo_coeff_orth.conj().T
+        return (mo_coeff_orth * mo_energy) @ mo_coeff_orth.conj().T
     else:
-        return _hermitian_part((mo_coeff_orth * mo_energy[:, None, :]) @ mo_coeff_orth.conj().transpose(0,2,1))
+        return _hermitian_part(
+            (mo_coeff_orth * mo_energy[:, None, :])
+            @ mo_coeff_orth.conj().transpose(0, 2, 1))
 
 def _line_minimize(haux_eval, haux, direction, state, alpha_t,
                                          alpha_t_min, max_cycle):
