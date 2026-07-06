@@ -97,7 +97,7 @@ def remove_gcscf(mf):
 class _GCKSCF:
     '''Finite-temperature k-point SCF via auxiliary-Hamiltonian minimization.'''
 
-    __name_mixin__ = 'GC-KSCF'
+    __name_mixin__ = 'GC'
 
     _keys = {
         'sigma', 'mu0', 'fix_spin', 'auxh_step', 'auxh_min_step',
