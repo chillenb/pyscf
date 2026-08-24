@@ -394,7 +394,7 @@ def init_guess_by_chkfile(cell, chkfile_name, project=None, kpts=None):
         Density matrix, 3D ndarray
     '''
     from pyscf.pbc.scf import kuhf
-    dm = kuhf.init_guess_by_chkfile(cell, chkfile_name, project, kpts)
+    dm = kuhf.init_guess_by_chkfile(cell, chkfile_name, project, kpts, guess_for_krhf=True)
     return dm[0] + dm[1]
 
 
