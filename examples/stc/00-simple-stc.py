@@ -6,7 +6,6 @@ from pyscf.pbc import gto, scf, df
 from pyscf.pbc.tools.k2gamma import translation_vectors_for_kmesh
 from pyscf.gto.moleintor import getints4c, getints
 import copy
-from pyscf.pbc.df.rsdf_helper import _binary_search
 import time
 import os 
 import ctypes
