@@ -256,6 +256,10 @@ class FFTDF(lib.StreamObject):
             if isinstance(self._kpts, KPoints):
                 self._kpts.reset(cell)
             self.cell = cell
+
+            self.__dict__.pop('_ws_exx', None)
+            self.__dict__.pop('_ws_lr_exx', None)
+
         self._rsh_df = {}
         # _ws_exx may be attached to AFTDF by weighted_coulG() in
         # pyscf/pbc/df/aft.py
