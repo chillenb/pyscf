@@ -93,4 +93,5 @@ tmp/
 .venv
 .pari_venv
 *.chk
+*.swp
 
