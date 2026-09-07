@@ -61,33 +61,34 @@ if __name__ == "__main__":
     print("STC Converged:", kmf_stc.converged)
     print("STC Total energy:", energy)
 
+    if args.odr < 2.5:
 
-    kmf_ws = dft.KRKS(
-        cell,
-        kpts=kpts,
-        xc="CAM-B3LYP",
-        exxdiv="vcut_ws",
-    )
+        kmf_ws = dft.KRKS(
+            cell,
+            kpts=kpts,
+            xc="CAM-B3LYP",
+            exxdiv="vcut_ws",
+        )
 
-    kmf_ws.with_df = FFTDF(cell, kpts=kpts)
-    energy = kmf_ws.kernel()
+        kmf_ws.with_df = FFTDF(cell, kpts=kpts)
+        energy = kmf_ws.kernel()
 
-    print("WS Converged:", kmf_ws.converged)
-    print("WS Total energy:", energy)
+        print("WS Converged:", kmf_ws.converged)
+        print("WS Total energy:", energy)
 
 
-    kmf_ewald = dft.KRKS(
-        cell,
-        kpts=kpts,
-        xc="CAM-B3LYP",
-        exxdiv="ewald",
-    )
+        kmf_ewald = dft.KRKS(
+            cell,
+            kpts=kpts,
+            xc="CAM-B3LYP",
+            exxdiv="ewald",
+        )
 
-    kmf_ewald.with_df = FFTDF(cell, kpts=kpts)
-    energy = kmf_ewald.kernel()
+        kmf_ewald.with_df = FFTDF(cell, kpts=kpts)
+        energy = kmf_ewald.kernel()
 
-    print("EWALD Converged:", kmf_ewald.converged)
-    print("EWALD Total energy:", energy)
+        print("EWALD Converged:", kmf_ewald.converged)
+        print("EWALD Total energy:", energy)
 
 
 
