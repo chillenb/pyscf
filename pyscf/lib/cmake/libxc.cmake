@@ -11,18 +11,22 @@ elseif(BUILD_LIBXC)
   set(LIBXC_INSTALL_DIR ${PROJECT_SOURCE_DIR}/deps)
   include(ExternalProject)
   ExternalProject_Add(libxc
-      #GIT_REPOSITORY https://gitlab.com/libxc/libxc.git
-      #GIT_TAG master
-      URL https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.gz
+      GIT_REPOSITORY https://gitlab.com/libxc/libxc.git
+      GIT_TAG 7.1.2
+      GIT_SHALLOW ON
+      # URL https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.gz
       PREFIX ${PROJECT_BINARY_DIR}/deps
       INSTALL_DIR ${LIBXC_INSTALL_DIR}
-      CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1
-              -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
-              -DCMAKE_INSTALL_LIBDIR:PATH=lib
-              -DENABLE_FORTRAN=0 -DDISABLE_KXC=1 -DDISABLE_LXC=1
-              -DENABLE_XHOST:STRING=${BUILD_MARCH_NATIVE}
-              -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
-        -DCMAKE_POLICY_VERSION_MINIMUM=3.5 # remove when libxc update version min in next release
+      CMAKE_ARGS -DCMAKE_BUILD_TYPE=RELEASE -DBUILD_SHARED_LIBS=1 -DBUILD_TESTING=OFF
+            -DCMAKE_INSTALL_PREFIX:PATH=<INSTALL_DIR>
+            -DCMAKE_INSTALL_LIBDIR:PATH=lib
+            -DENABLE_FORTRAN=0 -DMAXORDER=3
+            -DBUILD_TESTING=OFF
+            -DCMAKE_C_CREATE_SHARED_LIBRARY=${C_LINK_TEMPLATE}
+            -DENABLE_XHOST:STRING=${BUILD_MARCH_NATIVE}
+            -DCMAKE_C_COMPILER:STRING=${CMAKE_C_COMPILER}
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5 # remove when libxc update version min in next release
+      INSTALL_BYPRODUCTS ${LIBXC_INSTALL_DIR}/lib/libxc${CMAKE_SHARED_LIBRARY_SUFFIX}
     )
 
   # Make an imported library target for libxc.
@@ -30,6 +34,7 @@ elseif(BUILD_LIBXC)
   set_target_properties(xc PROPERTIES IMPORTED_LOCATION ${LIBXC_INSTALL_DIR}/lib/libxc${CMAKE_SHARED_LIBRARY_SUFFIX})
   # Tell CMake that the imported library is built by the external project.
   add_dependencies(xc libxc)
+  file(MAKE_DIRECTORY ${LIBXC_INSTALL_DIR}/include)
   target_include_directories(xc INTERFACE ${LIBXC_INSTALL_DIR}/include)
   # libxc_itrf will link to Libxc::xc. This is what find_package would have provided.
   add_library(Libxc::xc ALIAS xc)
