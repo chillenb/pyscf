@@ -181,8 +181,8 @@ if(BUILD_LIBCINT)
   set(LIBCINT_GIT https://github.com/sunqm/libcint.git) # libcint is a portable, cross-platform implementation
   set(LIBCINT_VERSION v6.1.3)
   if (USE_QCINT)
-    set(LIBCINT_GIT https://github.com/sunqm/qcint.git) # qcint is an optimized implementation for x86-64 architecture
-    set(LIBCINT_VERSION v6.1.3)
+    set(LIBCINT_GIT https://github.com/chillenb/qcint.git) # qcint is an optimized implementation for x86-64 architecture
+    set(LIBCINT_VERSION 4ed92335415ae248b4c184c2b4b6d754d9453cab) # cmakepatch
     if(NOT BUILD_MARCH_NATIVE)
       message(WARNING "The BUILD_MARCH_NATIVE option is not specified! qcint may not compile unless you explicitly pass compiler flags that turn on vectorization!")
     endif()
