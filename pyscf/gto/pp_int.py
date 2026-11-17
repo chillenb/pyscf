@@ -68,6 +68,11 @@ def get_gth_pp(mol):
                 ilp[i] = ppnl_half[i][p0:p0+nd]
             offset[i] = p0 + nd
         vpploc += np.einsum('ilp,ij,jlq->pq', ilp.conj(), hl, ilp)
+
+    # numerically integrated parts of UPF pseudopotentials
+    from pyscf.pbc.gto.pseudo import upf
+    if upf.has_upf(mol):
+        vpploc = vpploc + upf.get_pp_upf(mol)
     return vpploc
 
 def _int_vnl(mol, fakemol, hl_blocks, intors, comp=None):

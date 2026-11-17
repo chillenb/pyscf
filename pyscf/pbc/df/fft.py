@@ -177,6 +177,15 @@ def get_pp(mydf, kpts=None):
         else:
             vpp[k] += vppnl
 
+    from pyscf.pbc.gto.pseudo import upf
+    if upf.has_upf(cell):
+        vupf = upf.get_pp_upf(cell, kpts)
+        for k, kpt in enumerate(kpts):
+            if is_zero(kpt):
+                vpp[k] = vpp[k] + vupf[k].real
+            else:
+                vpp[k] = vpp[k] + vupf[k]
+
     if is_single_kpt:
         vpp = vpp[0]
     return numpy.asarray(vpp)

@@ -809,6 +809,9 @@ def load_pseudo(filename_or_basisname, symb):
     '''Parses PP database file
     '''
     symb = ''.join([i for i in symb if i.isalpha()])
+    from pyscf.gto.basis import parse_upf
+    if parse_upf.is_upf(filename_or_basisname):
+        return parse_upf.load(filename_or_basisname, symb)
     if os.path.isfile(filename_or_basisname):
         return _load_external(parse_cp2k_pp, filename_or_basisname, symb)
 

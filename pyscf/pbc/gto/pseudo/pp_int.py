@@ -434,7 +434,8 @@ def get_pp_nl(cell, kpts=None):
 
     is_gamma_point = kpts is None or gamma_point(kpts)
     if is_gamma_point:
-        return _contract_ppnl(cell, fakecell, hl_blocks, ppnl_half, kpts=kpts)
+        ppnl = _contract_ppnl(cell, fakecell, hl_blocks, ppnl_half, kpts=kpts)
+        return _add_upf(cell, ppnl, kpts)
 
     nao = cell.nao
     if is_gamma_point:
@@ -467,7 +468,16 @@ def get_pp_nl(cell, kpts=None):
                 hl_offset[i] = p1
             tmp = lib.einsum('nij,knjlq->knilq', hl_block, ilp)
             ppnl += lib.einsum('knilp,knilq->kpq', ilp.conj(), tmp)
-    return ppnl
+    return _add_upf(cell, ppnl, kpts)
+
+def _add_upf(cell, ppnl, kpts):
+    '''Adds the numerically integrated parts of UPF pseudopotentials (see
+    pyscf.pbc.gto.pseudo.upf) to the nonlocal GTH matrix.'''
+    from pyscf.pbc.gto.pseudo import upf
+    if not upf.has_upf(cell):
+        return ppnl
+    vupf = upf.get_pp_upf(cell, kpts)
+    return ppnl + vupf.reshape(numpy.shape(ppnl))
 
 
 def vppnl_nuc_grad(cell, dm, kpts=None):
